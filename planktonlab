@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+readonly APP_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly UV_VERSION="${PLANKTONLAB_UV_VERSION:-0.12.11}"
+readonly RUNTIME_DIR="$APP_ROOT/.planktonlab-runtime"
+readonly UV_BIN="$RUNTIME_DIR/bin/uv"
+readonly VENV_DIR="${PLANKTONLAB_VENV_DIR:-$APP_ROOT/.venv}"
+
+info() {
+  printf '\033[1;34m[PlanktonLab]\033[0m %s\n' "$1"
+}
+
+fail() {
+  printf '\033[1;31m[PlanktonLab]\033[0m %s\n' "$1" >&2
+  exit 1
+}
+
+install_uv() {
+  info "Installing the portable environment manager (one-time download)."
+  mkdir -p "$RUNTIME_DIR/bin"
+  export UV_UNMANAGED_INSTALL="$RUNTIME_DIR/bin"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" | sh
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO- "https://astral.sh/uv/$UV_VERSION/install.sh" | sh
+  else
+    fail "A first-time installation needs curl or wget and an internet connection."
+  fi
+
+  [[ -x "$UV_BIN" ]] || fail "The environment manager could not be installed."
+}
+
+cd "$APP_ROOT"
+[[ -f "$APP_ROOT/pyproject.toml" && -f "$APP_ROOT/uv.lock" ]] || \
+  fail "pyproject.toml or uv.lock is missing. Restore the complete Git checkout."
+
+[[ -x "$UV_BIN" ]] || install_uv
+
+accelerator="${PLANKTONLAB_ACCELERATOR:-cpu}"
+case "$accelerator" in
+  cpu) ;;
+  cuda)
+    [[ "$(uname -s)" != "Darwin" ]] || \
+      fail "CUDA is unavailable on macOS. Use PLANKTONLAB_ACCELERATOR=cpu."
+    ;;
+  *) fail "PLANKTONLAB_ACCELERATOR must be either 'cpu' or 'cuda'." ;;
+esac
+
+export UV_PROJECT_ENVIRONMENT="$VENV_DIR"
+export UV_PYTHON_INSTALL_DIR="$RUNTIME_DIR/python"
+
+info "Preparing Python 3.12 and the locked $accelerator dependencies."
+"$UV_BIN" --system-certs sync --frozen --extra "$accelerator"
+
+venv_python="$VENV_DIR/bin/python"
+[[ -x "$venv_python" ]] || fail "The Python environment was not created successfully."
+"$venv_python" -c 'import cv2, fastai, flask, sqlalchemy, waitress' || \
+  fail "A required dependency could not be imported after installation."
+
+info "Starting PlanktonLab. Press Ctrl+C to stop it."
+exec "$venv_python" "$APP_ROOT/run.py" "$@"

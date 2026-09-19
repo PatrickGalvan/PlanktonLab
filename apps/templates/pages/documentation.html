@@ -1,0 +1,53 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/documentation.css') }}?v=2.0.1" rel="stylesheet" />
+{% endblock page_styles %}
+
+{% block content %}
+<main class="documentation-page">
+  <aside class="documentation-sidebar" aria-label="Documentation navigation">
+    <div class="documentation-sidebar-inner">
+      <p class="page-eyebrow">Quick reference</p>
+      <label for="documentation-filter">On this page</label>
+      <input id="documentation-filter" type="search" placeholder="Filter sections">
+      <nav aria-label="Documentation sections">
+        <ul id="documentation-toc"></ul>
+      </nav>
+    </div>
+  </aside>
+  <article class="documentation-content">
+    {{ documentation_html }}
+  </article>
+</main>
+{% endblock content %}
+
+{% block page_scripts %}
+<script>
+  const documentationContent = document.querySelector('.documentation-content');
+  const documentationToc = document.getElementById('documentation-toc');
+  const documentationFilter = document.getElementById('documentation-filter');
+  const headings = [...documentationContent.querySelectorAll('h2, h3')];
+
+  headings.forEach((heading, index) => {
+    const slug = heading.textContent.toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || `section-${index + 1}`;
+    heading.id = slug;
+
+    const item = document.createElement('li');
+    item.className = heading.tagName === 'H3' ? 'toc-subsection' : 'toc-section';
+    const link = document.createElement('a');
+    link.href = `#${slug}`;
+    link.textContent = heading.textContent;
+    item.appendChild(link);
+    documentationToc.appendChild(item);
+  });
+
+  documentationFilter.addEventListener('input', () => {
+    const query = documentationFilter.value.trim().toLowerCase();
+    documentationToc.querySelectorAll('li').forEach((item) => {
+      item.hidden = !item.textContent.toLowerCase().includes(query);
+    });
+  });
+</script>
+{% endblock page_scripts %}

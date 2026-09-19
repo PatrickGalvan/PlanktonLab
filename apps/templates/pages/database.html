@@ -1,0 +1,28 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/database.css') }}?v=2.0.0" rel="stylesheet" />
+{% endblock page_styles %}
+{% block content %}
+<div class="tables-list-container">
+  <header class="page-header">
+    <p class="page-eyebrow">Data management</p>
+    <h1>Database tables</h1>
+    <p class="page-subtitle">Browse application records, sampling metadata, and classified image crops.</p>
+  </header>
+  <ul class="tables-list">
+    {% for table in tables %}
+    <li class="table-item">
+      <a href="{{ url_for('tables_builder', param=table) }}">
+        <span class="table-icon">
+          <i class="fa-solid fa-table"></i> <!-- FontAwesome Table Icon -->
+        </span>
+        <span class="table-copy">
+          <span class="table-name">{{ table | replace('_', ' ') | title }}</span>
+          <span class="table-hint">Open records <i class="fa-solid fa-arrow-right"></i></span>
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock content %}

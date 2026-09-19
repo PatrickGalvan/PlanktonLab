@@ -1,0 +1,144 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/landing_page.css') }}?v=3.0.0" rel="stylesheet" />
+{% endblock page_styles %}
+{% block content %}
+<div class="landing-container">
+  <section class="landing-hero" aria-labelledby="landing-title">
+    <div class="hero-copy">
+      <p class="hero-eyebrow"><span aria-hidden="true"></span> Zooplankton classification workspace</p>
+      <h1 id="landing-title">Turn microscopy images into traceable classification data.</h1>
+      <p class="hero-subtitle">
+        Detect organisms, review every prediction, and build analysis-ready datasets in one focused workflow.
+      </p>
+
+      <div class="hero-actions">
+        <a href="{{ url_for('select_source') }}" class="btn-primary hero-primary">
+          <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+          Start classifying
+        </a>
+        <a href="{{ url_for('query_builder') }}" class="btn-secondary">
+          <i class="fa-solid fa-chart-column" aria-hidden="true"></i>
+          Explore data
+        </a>
+      </div>
+
+      <ul class="hero-assurances" aria-label="Workspace capabilities">
+        <li><i class="fa-solid fa-database" aria-hidden="true"></i> Local SQLite workspace</li>
+        <li><i class="fa-solid fa-check-double" aria-hidden="true"></i> Reviewable predictions</li>
+        <li><i class="fa-solid fa-box-archive" aria-hidden="true"></i> Export-ready samples</li>
+      </ul>
+    </div>
+
+    <div class="hero-visual" aria-label="Classification workflow preview">
+      <div class="preview-header">
+        <div>
+          <span class="preview-kicker">Workspace</span>
+          <strong>Classification pipeline</strong>
+        </div>
+        <span class="status-pill"><span aria-hidden="true"></span> Ready</span>
+      </div>
+      <figure class="preview-image">
+        <img src="{{ url_for('static', filename='assets/media/processing.png') }}"
+          alt="Microscopy workstation showing a zooplankton detection workflow" />
+        <figcaption><i class="fa-solid fa-microscope" aria-hidden="true"></i> Image analysis</figcaption>
+      </figure>
+      <ol class="preview-steps">
+        <li><span>01</span><strong>Upload</strong><small>Add image metadata</small></li>
+        <li><span>02</span><strong>Detect</strong><small>Refine bounding boxes</small></li>
+        <li><span>03</span><strong>Review</strong><small>Confirm classifications</small></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="workflow-section" aria-labelledby="workflow-title">
+    <div class="section-heading">
+      <div>
+        <p class="section-eyebrow">A clear path through your data</p>
+        <h2 id="workflow-title">From sample to trusted dataset</h2>
+      </div>
+      <p>Keep source metadata, detections, model predictions, and human review connected at every stage.</p>
+    </div>
+
+    <ol class="workflow-grid">
+      <li class="workflow-card">
+        <span class="workflow-number">01</span>
+        <div class="workflow-icon"><i class="fa-regular fa-image" aria-hidden="true"></i></div>
+        <h3>Bring in a sample</h3>
+        <p>Choose an existing image or upload a new microscopy sample with its operator, lake, and date.</p>
+      </li>
+      <li class="workflow-card">
+        <span class="workflow-number">02</span>
+        <div class="workflow-icon"><i class="fa-solid fa-vector-square" aria-hidden="true"></i></div>
+        <h3>Detect and classify</h3>
+        <p>Tune the mask, resize the working image, and correct bounding boxes before classification.</p>
+      </li>
+      <li class="workflow-card">
+        <span class="workflow-number">03</span>
+        <div class="workflow-icon"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i></div>
+        <h3>Review and reuse</h3>
+        <p>Confirm labels, inspect history, query results, and turn reviewed crops into training data.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="capabilities-section" aria-labelledby="capabilities-title">
+    <div class="section-heading compact">
+      <div>
+        <p class="section-eyebrow">Everything stays connected</p>
+        <h2 id="capabilities-title">Continue where your work needs you</h2>
+      </div>
+    </div>
+
+    <div class="capability-grid">
+      <a class="capability-card capability-featured" href="{{ url_for('select_source') }}">
+        <span class="capability-icon"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></span>
+        <div>
+          <span class="card-label">Core workflow</span>
+          <h3>Classification and review</h3>
+          <p>Open an image, refine detections, and review predicted organisms in one workspace.</p>
+        </div>
+        <span class="card-link">Open classification <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+      </a>
+
+      <a class="capability-card" href="{{ url_for('query_builder') }}">
+        <span class="capability-icon"><i class="fa-solid fa-magnifying-glass-chart" aria-hidden="true"></i></span>
+        <div>
+          <h3>Explore results</h3>
+          <p>Build visual queries or use guarded SQL for deeper analysis.</p>
+        </div>
+        <span class="card-link">Open data explorer <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+      </a>
+
+      <a class="capability-card" href="{{ url_for('pages_database') }}">
+        <span class="capability-icon"><i class="fa-solid fa-layer-group" aria-hidden="true"></i></span>
+        <div>
+          <h3>Manage records</h3>
+          <p>Inspect sampling metadata, classifications, reviews, and model runs.</p>
+        </div>
+        <span class="card-link">View database <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+      </a>
+
+      <a class="capability-card" href="{{ url_for('training_page') }}">
+        <span class="capability-icon"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i></span>
+        <div>
+          <h3>Train a classifier</h3>
+          <p>Export reviewed crops and follow the guided model-training workflow.</p>
+        </div>
+        <span class="card-link">View training guide <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+      </a>
+    </div>
+  </section>
+
+  <section class="landing-cta" aria-labelledby="cta-title">
+    <div>
+      <p class="section-eyebrow">Ready for the next sample?</p>
+      <h2 id="cta-title">Start with an image. Keep every decision traceable.</h2>
+    </div>
+    <div class="cta-actions">
+      <a href="{{ url_for('select_source') }}" class="btn-primary">Choose an image</a>
+      <a href="{{ url_for('documentation') }}" class="text-link">Read the quick reference <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+    </div>
+  </section>
+</div>
+{% endblock content %}

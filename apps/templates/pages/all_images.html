@@ -1,0 +1,365 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/image_gallery.css') }}?v=4.3.1" rel="stylesheet" />
+{% endblock page_styles %}
+{% block content %}
+<div class="image-gallery">
+    <header class="gallery-header">
+        <div>
+            <p class="page-eyebrow">Bulk review</p>
+            <h1>{{ species }}</h1>
+            <p>{{ rows|length }} sample{{ '' if rows|length == 1 else 's' }} in this classification group.</p>
+        </div>
+        <span class="review-progress{% if unreviewed_count == 0 %} is-complete{% endif %}">
+            {% if unreviewed_count %}
+            {{ unreviewed_count }} awaiting review
+            {% else %}
+            <i class="fa-solid fa-circle-check" aria-hidden="true"></i> Fully reviewed
+            {% endif %}
+        </span>
+    </header>
+    {% for image in rows %}
+    <div class="image-card{% if image.review_status == 'reviewed' %} is-reviewed{% endif %}">
+        <img src="data:image/jpeg;base64,{{ image.image_base64 }}" alt="Sample image {{ image.id }}"
+            data-index="{{ loop.index0 }}" data-id="{{ image.id }}" onclick="openPreview(this)" />
+        <div class="image-overlay">
+            <span>#{{ image.id }}</span>
+        </div>
+        {% if image.review_status == 'reviewed' %}
+        <span class="reviewed-indicator" title="Reviewed" aria-label="Reviewed">
+            <i class="fa-solid fa-check" aria-hidden="true"></i>
+        </span>
+        {% endif %}
+    </div>
+    {% endfor %}
+    <div class="gallery-actions">
+        <a href="/pages/tables" class="back-btn" id="backButton">Back</a>
+        {% if next_species %}
+        <a class="next-review-btn"
+            href="{{ url_for('show_all_images', image_id=image_id, species=next_species) }}">
+            Next: {{ next_species }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        </a>
+        {% endif %}
+        <form class="review-action-group" method="POST"
+            action="{{ url_for('approve_species_review', image_id=image_id, species=species) }}"
+            onsubmit="return confirmBulkReview(event)">
+            <button class="review-gallery-btn" type="submit" name="review_action" value="stay"
+                data-count="{{ unreviewed_count }}"
+                {% if unreviewed_count == 0 %}disabled{% endif %}>
+                <i class="fa-solid fa-check-double" aria-hidden="true"></i>
+                <span>{{ 'Approve group' if unreviewed_count else 'Reviewed' }}</span>
+                {% if unreviewed_count %}<span class="action-count">{{ unreviewed_count }}</span>{% endif %}
+            </button>
+            <button class="review-next-btn" type="submit" name="review_action" value="next"
+                data-count="{{ unreviewed_count }}" {% if unreviewed_count == 0 %}disabled{% endif %}>
+                <span>Approve &amp; next</span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+            </button>
+        </form>
+        <button class="save-gallery-btn" type="button" onclick="saveAll(true)" disabled>
+            Save corrections &amp; next
+        </button>
+    </div>
+</div>
+
+<!-- Modal -->
+<div id="imagePreviewModal" class="image-modal">
+    <button class="close-modal" type="button" onclick="closePreview()" aria-label="Close preview">&times;</button>
+
+    <div class="modal-content">
+        <div class="preview-row">
+            <button class="preview-nav preview-nav-previous" type="button" onclick="showImage(currentIndex - 1)"
+                aria-label="Previous sample"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
+            <div class="preview-stage">
+                <img id="previewImage" alt="Selected classification sample" />
+            </div>
+            <button class="preview-nav preview-nav-next" type="button" onclick="showImage(currentIndex + 1)"
+                aria-label="Next sample"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+        </div>
+
+        <div class="relabel-panel">
+            <label for="speciesSelector">Correct classification <span class="key-hint">↑ / ↓</span></label>
+            <select id="speciesSelector" onchange="queueSelectedSpecies()">
+                <option value="">Choose another species…</option>
+                <option value="{{ species }}">{{ species }} (current)</option>
+                {% for spec in species_list %}
+                <option value="{{ spec }}">{{ spec }}</option>
+                {% endfor %}
+            </select>
+            <div class="relabel-actions">
+                <button class="delete-sample-btn" type="button" onclick="selectSpecies('delete', true)">
+                    <i class="fa-solid fa-trash" aria-hidden="true"></i> Delete
+                </button>
+                <button class="save-btn" type="button" onclick="saveAll(false)" disabled>Save corrections</button>
+            </div>
+            <div class="keyboard-guide" aria-label="Keyboard shortcuts">
+                <span><kbd>↑</kbd><kbd>↓</kbd> change and queue taxon</span>
+                <span><kbd>←</kbd><kbd>→</kbd> previous / next image</span>
+                <span><kbd>Enter</kbd> next image</span>
+                <span><kbd>Ctrl</kbd> + <kbd>Enter</kbd> save</span>
+            </div>
+        </div>
+    </div>
+    <div class="image-counter" id="imageCounter"></div>
+</div>
+
+<script>
+    let currentIndex = 0;
+    let currentImageId = null;
+    let images = [];
+    let selections = [];
+    const currentSpecies = {{ species|tojson }};
+
+    document.addEventListener("DOMContentLoaded", () => {
+        images = Array.from(document.querySelectorAll(".image-gallery img"));
+        document.getElementById("previewImage").addEventListener("load", sizePreviewToImage);
+    });
+
+    window.addEventListener("resize", sizePreviewToImage);
+
+    function sizePreviewToImage() {
+        const previewImg = document.getElementById("previewImage");
+        const previewStage = previewImg.closest(".preview-stage");
+        if (!previewImg.naturalWidth || !previewImg.naturalHeight) return;
+
+        const targetWidth = previewImg.naturalWidth * 2;
+        const targetHeight = previewImg.naturalHeight * 2;
+        const modalWidth = previewImg.closest(".modal-content").clientWidth;
+        const availableWidth = Math.max(1, Math.min(376, modalWidth - 104));
+        const availableHeight = Math.max(1, Math.min(360, window.innerHeight * 0.42));
+        const fitScale = Math.min(1, availableWidth / targetWidth, availableHeight / targetHeight);
+
+        previewStage.style.setProperty("--preview-width", `${Math.round(targetWidth * fitScale)}px`);
+        previewStage.style.setProperty("--preview-height", `${Math.round(targetHeight * fitScale)}px`);
+    }
+
+    const currentUrl = window.location.pathname;  // e.g. "/pages/classification/1/Daphnia"
+    const parts = currentUrl.split('/');
+
+    // Remove last part if it's not empty
+    if (parts[parts.length - 1] !== '') {
+        parts.pop();
+    }
+
+    const backUrl = parts.join('/') || '/';  // default to home if empty
+    document.getElementById('backButton').href = backUrl;
+
+    function openPreview(img) {
+        const modal = document.getElementById("imagePreviewModal");
+        const previewImg = document.getElementById("previewImage");
+
+        currentIndex = parseInt(img.dataset.index, 10);
+        currentImageId = parseInt(img.dataset.id, 10);
+
+        previewImg.src = img.src;
+        modal.style.display = "flex";
+
+        highlightSelectedSpecies();
+        updateCounter();
+        preloadAdjacent();
+    }
+
+
+    function closePreview() {
+        document.getElementById("imagePreviewModal").style.display = "none";
+    }
+
+    function showImage(index) {
+        if (!images.length) return;
+
+        if (index < 0) index = images.length - 1;
+        if (index >= images.length) index = 0;
+
+        currentIndex = index;
+
+        const img = images[currentIndex];
+
+        document.getElementById("previewImage").src = img.src;
+        currentImageId = parseInt(img.dataset.id, 10);
+
+        highlightSelectedSpecies();
+        updateCounter();
+        preloadAdjacent();
+    }
+    /* Update index display */
+    function updateCounter() {
+        const counter = document.getElementById("imageCounter");
+        counter.textContent = `${currentIndex + 1} / ${images.length}`;
+    }
+
+    /* Preload next & previous images */
+    function preloadAdjacent() {
+        const nextIndex = (currentIndex + 1) % images.length;
+        const prevIndex = (currentIndex - 1 + images.length) % images.length;
+
+        [nextIndex, prevIndex].forEach(i => {
+            const img = new Image();
+            img.src = images[i].src;
+        });
+    }
+
+    /* Keyboard navigation */
+    document.addEventListener("keydown", (e) => {
+        const modal = document.getElementById("imagePreviewModal");
+        if (modal.style.display !== "flex") return;
+
+        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            e.preventDefault();
+            saveAll(false);
+            return;
+        }
+
+        switch (e.key) {
+            case "ArrowUp":
+                e.preventDefault();
+                cycleSpecies(-1);
+                break;
+            case "ArrowDown":
+                e.preventDefault();
+                cycleSpecies(1);
+                break;
+            case "ArrowRight":
+                e.preventDefault();
+                showImage(currentIndex + 1);
+                break;
+            case "ArrowLeft":
+                e.preventDefault();
+                showImage(currentIndex - 1);
+                break;
+            case "Enter":
+                if (e.target.closest("button")) break;
+                e.preventDefault();
+                showImage(currentIndex + 1);
+                break;
+            case "Escape":
+                closePreview();
+                break;
+        }
+    });
+
+    function cycleSpecies(direction) {
+        const selector = document.getElementById("speciesSelector");
+        const firstSpeciesIndex = 1;
+        const lastSpeciesIndex = selector.options.length - 1;
+        if (lastSpeciesIndex < firstSpeciesIndex) return;
+
+        let nextIndex = selector.selectedIndex + direction;
+        if (selector.selectedIndex < firstSpeciesIndex) {
+            nextIndex = direction > 0 ? firstSpeciesIndex : lastSpeciesIndex;
+        } else if (nextIndex > lastSpeciesIndex) {
+            nextIndex = firstSpeciesIndex;
+        } else if (nextIndex < firstSpeciesIndex) {
+            nextIndex = lastSpeciesIndex;
+        }
+
+        selector.selectedIndex = nextIndex;
+        selectSpecies(selector.value, false);
+    }
+
+    /* Click outside closes */
+    document.getElementById("imagePreviewModal").addEventListener("click", (e) => {
+        if (e.target.id === "imagePreviewModal") {
+            closePreview();
+        }
+    });
+
+    function queueSelectedSpecies() {
+        const selector = document.getElementById("speciesSelector");
+        if (selector.value) selectSpecies(selector.value, false);
+    }
+
+    function selectSpecies(species, advance = false) {
+        if (currentImageId === null) return;
+
+        const existing = selections.find(e => e.id === currentImageId);
+
+        if (species === currentSpecies) {
+            selections = selections.filter(e => e.id !== currentImageId);
+        } else if (existing) {
+            existing.species = species; // overwrite
+        } else {
+            selections.push({ id: currentImageId, species });
+        }
+
+        highlightSelectedSpecies();
+        highlightGridSelections();
+        updateSaveLabel();
+        if (advance) showImage(currentIndex + 1);
+    }
+
+    async function saveAll(goToNext) {
+        if (!selections.length) return;
+
+        const saveButtons = document.querySelectorAll(".save-btn, .save-gallery-btn");
+        saveButtons.forEach(button => button.disabled = true);
+        const params = new URLSearchParams({
+            image_id: {{ image_id|tojson }},
+            species: {{ species|tojson }},
+            next: goToNext ? "1" : "0"
+        });
+
+        try {
+            const response = await fetch(`/save-species?${params}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(selections)
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || "Unable to save changes.");
+            selections = [];
+            window.location.assign(result.next_url || window.location.href);
+        } catch (error) {
+            window.alert(error.message);
+            saveButtons.forEach(button => button.disabled = false);
+        }
+    }
+
+    function confirmBulkReview(event) {
+        const submitter = event.submitter || document.querySelector('.review-gallery-btn');
+        const count = Number(submitter.dataset.count);
+        const continues = submitter.value === "next" ? " and continue to the next taxon" : "";
+        if (selections.length) {
+            return window.confirm(
+                `${selections.length} unsaved label change(s) will not be included. ` +
+                `Approve the ${count} currently classified sample(s)${continues} anyway?`
+            );
+        }
+        return window.confirm(
+            `Approve all ${count} unreviewed sample(s) as ${currentSpecies}${continues}?`
+        );
+    }
+
+    function updateSaveLabel() {
+        const count = selections.length;
+        const modalButton = document.querySelector(".save-btn");
+        const galleryButton = document.querySelector(".save-gallery-btn");
+        modalButton.textContent = count ? `Save corrections (${count})` : "Save corrections";
+        galleryButton.textContent = count ? `Save ${count} correction${count === 1 ? "" : "s"} & next` : "Save corrections & next";
+        modalButton.disabled = count === 0;
+        galleryButton.disabled = count === 0;
+
+    }
+
+    function highlightSelectedSpecies() {
+        const selector = document.getElementById("speciesSelector");
+        const selected = selections.find(s => s.id === currentImageId);
+        selector.value = selected && selected.species !== "delete" ? selected.species : currentSpecies;
+    }
+
+    function highlightGridSelections() {
+        document.querySelectorAll(".image-card").forEach(card => {
+            const img = card.querySelector("img");
+            const id = parseInt(img.dataset.id, 10);
+
+            const isSelected = selections.some(s => s.id === id);
+            card.classList.toggle("selected", isSelected);
+        });
+    }
+
+
+
+</script>
+
+
+
+
+{% endblock content %}

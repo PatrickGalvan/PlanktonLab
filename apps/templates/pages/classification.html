@@ -1,0 +1,731 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/classification.css') }}?v=3.2.0" rel="stylesheet" />
+{% endblock page_styles %}
+{% block head_scripts %}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>{% endblock head_scripts %}
+{% block content %}
+<section class="classification-workspace">
+    <header class="classification-toolbar">
+        <div>
+            <h1>Classification and review</h1>
+            <p>Draw and review boxes in original-image coordinates.</p>
+        </div>
+        <form class="runtime-model-selector" method="POST" action="{{ url_for('select_model') }}">
+            <input type="hidden" name="next" value="{{ request.path }}" />
+            <label for="runtime-model">Classification model</label>
+            <select id="runtime-model" name="model_version_id" onchange="this.form.submit()"
+                {% if not model_versions %}disabled{% endif %}>
+                {% if not model_versions %}
+                <option>No model available</option>
+                {% else %}
+                {% for model in model_versions %}
+                <option value="{{ model.id }}"{% if selected_model and selected_model.id == model.id %} selected{% endif %}>
+                    {{ model.name }} · {{ model.version[:12] }}{% if model.is_active %} · default{% endif %}
+                </option>
+                {% endfor %}
+                {% endif %}
+            </select>
+        </form>
+        <div class="image-zoom-controls" role="group" aria-label="Image zoom controls">
+            <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">
+                <i class="fa-solid fa-magnifying-glass-minus" aria-hidden="true"></i>
+            </button>
+            <input id="image-zoom" type="range" min="10" max="300" step="5" value="100"
+                aria-label="Image zoom percentage" />
+            <output id="zoom-value" for="image-zoom">100%</output>
+            <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">
+                <i class="fa-solid fa-magnifying-glass-plus" aria-hidden="true"></i>
+            </button>
+            <button id="zoom-fit" type="button" aria-label="Fit image to workspace" title="Fit image to workspace">
+                <i class="fa-solid fa-expand" aria-hidden="true"></i>
+            </button>
+        </div>
+    </header>
+    <div class="canvas_container">
+        <img id="raw_img" class="img_classification" src="data:image/jpeg;base64,{{ img_data_raw }}" alt="" />
+        <img id="mask_img" class="img_classification img_classification_none"
+            src="data:image/jpeg;base64,{{ img_data_mask }}" alt="" />
+        <canvas id="overlay_canvas" data-boxes="{{ img_boxes | safe }}"></canvas>
+    </div>
+</section>
+
+<!-- ────────────── FLOATING BOTTOM BAR ────────────── -->
+<div class="bottom-bar">
+    <div class="card-box" id="mask-slider-box">
+        <button type="button" onclick="detectBoundingBox()" aria-label="Detect bounding boxes"
+            title="Detect bounding boxes">
+            <i class="fa-solid fa-crosshairs" aria-hidden="true"></i>
+            <span class="label">Detect Boxes</span>
+        </button>
+    </div>
+
+    <div class="card-box">
+        <button id="mask-view-toggle" type="button" onclick="toggle_class_images()" aria-label="Show segmentation mask"
+            title="Show segmentation mask" aria-pressed="false">
+            <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+            <span class="label">Show Mask</span>
+        </button>
+    </div>
+
+    <div class="card-box">
+        <button type="button" onclick="updateChangesToDB()" aria-label="Save reviewed changes"
+            title="Save reviewed changes">
+            <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+            <span class="label">Save Changes</span>
+        </button>
+    </div>
+
+    <div class="card-box">
+        <button type="button" onclick="sendBoxesToBackend()" aria-label="Run image classification"
+            title="Run image classification">
+            <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+            <span class="label">Classify Image</span>
+        </button>
+    </div>
+
+    <div class="card-box">
+        <button id="review-results" type="button"
+            {% if review_species %}
+            onclick="openReviewGallery()"
+            aria-label="Review classifications starting with {{ review_species }}"
+            title="Review classifications starting with {{ review_species }}"
+            {% else %}
+            aria-label="No classifications available to review"
+            title="Classify and save samples before opening review"
+            disabled
+            {% endif %}>
+            <i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>
+            <span class="label">Review Results</span>
+        </button>
+    </div>
+
+    <div class="card-box">
+        <button type="button" onclick="removeAllBoxes()" aria-label="Remove all bounding boxes"
+            title="Remove all bounding boxes">
+            <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+            <span class="label">Remove All Boxes</span>
+        </button>
+    </div>
+    <div class="card-box">
+        <button id="summary-toggle" type="button" onclick="showGraph()" aria-label="Show classification summary"
+            title="Show classification summary" aria-pressed="false">
+            <i class="fa-solid fa-chart-column" aria-hidden="true"></i>
+            <span class="label">Show Summary</span>
+        </button>
+    </div>
+</div>
+
+<div id="chart-container" class="hidden">
+    <canvas id="speciesChart"></canvas>
+</div>
+<div id="overlay" class="overlay hidden" aria-hidden="true">
+    <div class="classification-progress-card" role="status" aria-live="polite">
+        <p class="classification-progress-eyebrow">Image classification</p>
+        <h2 id="classification-progress-title">Preparing classification</h2>
+        <progress id="classification-progress" value="0" max="1"></progress>
+        <p id="classification-progress-detail">Preparing images…</p>
+        <button id="classification-progress-dismiss" class="btn-secondary hidden" type="button">Close</button>
+    </div>
+</div>
+
+<script>
+    // ─────────────────────────────────────────────
+    // Global consts
+    // ─────────────────────────────────────────────
+    let canvas = document.getElementById('overlay_canvas');
+    //let boxes = JSON.parse(canvas.dataset.boxes);
+    let boxes = {{ img_boxes | safe }}
+    let ctx = canvas.getContext('2d');
+    let update_boxes = []
+    const fromNumber = document.getElementById('fromNumber');
+    const toNumber = document.getElementById('toNumber');
+    const rawImg = document.getElementById('raw_img');
+    const maskImg = document.getElementById('mask_img');
+    const canvasContainer = document.querySelector('.canvas_container');
+    const zoomRange = document.getElementById('image-zoom');
+    const zoomValue = document.getElementById('zoom-value');
+    const overlay = document.getElementById('overlay');
+    const classificationProgress = document.getElementById('classification-progress');
+    const classificationProgressTitle = document.getElementById('classification-progress-title');
+    const classificationProgressDetail = document.getElementById('classification-progress-detail');
+    const classificationProgressDismiss = document.getElementById('classification-progress-dismiss');
+    let zoomScale = 1;
+
+    // Mouse tracking
+    let isDrawing = false;
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let currentY = 0;
+
+    // Hover tracking
+    let hoveredBoxIndex = null;
+    const reviewUrl = {% if review_species %}{{ url_for('show_all_images', image_id=image_id, species=review_species) | tojson }}{% else %}null{% endif %};
+
+    function openReviewGallery() {
+        if (!reviewUrl) return;
+        const hasPendingChanges = update_boxes.some(box => box !== null);
+        if (hasPendingChanges && !window.confirm('Unsaved box changes will be lost. Continue to review?')) {
+            return;
+        }
+        window.location.assign(reviewUrl);
+    }
+
+
+    // ─────────────────────────────────────────────
+    // Canvas resize on image load
+    // ─────────────────────────────────────────────
+    function updateDisplayedImageSize() {
+        const width = rawImg.naturalWidth * zoomScale;
+        const height = rawImg.naturalHeight * zoomScale;
+
+        [rawImg, maskImg, canvas].forEach(element => {
+            element.style.width = `${width}px`;
+            element.style.height = `${height}px`;
+        });
+
+        zoomRange.value = String(Math.round(zoomScale * 100));
+        zoomValue.value = `${Math.round(zoomScale * 100)}%`;
+        zoomValue.textContent = zoomValue.value;
+    }
+
+    function setZoom(percent, focusClientX = null, focusClientY = null) {
+        if (!rawImg.naturalWidth || !rawImg.naturalHeight) return;
+
+        const nextScale = Math.min(3, Math.max(0.1, percent / 100));
+        const containerRect = canvasContainer.getBoundingClientRect();
+        const viewportX = focusClientX === null
+            ? canvasContainer.clientWidth / 2
+            : focusClientX - containerRect.left;
+        const viewportY = focusClientY === null
+            ? canvasContainer.clientHeight / 2
+            : focusClientY - containerRect.top;
+        const imageX = (canvasContainer.scrollLeft + viewportX) / zoomScale;
+        const imageY = (canvasContainer.scrollTop + viewportY) / zoomScale;
+
+        zoomScale = nextScale;
+        updateDisplayedImageSize();
+
+        canvasContainer.scrollLeft = imageX * zoomScale - viewportX;
+        canvasContainer.scrollTop = imageY * zoomScale - viewportY;
+    }
+
+    function fitImageToWorkspace() {
+        if (!rawImg.naturalWidth || !rawImg.naturalHeight) return;
+
+        const availableWidth = Math.max(1, canvasContainer.clientWidth - 16);
+        const availableHeight = Math.max(1, canvasContainer.clientHeight - 16);
+        const fitScale = Math.min(
+            1,
+            availableWidth / rawImg.naturalWidth,
+            availableHeight / rawImg.naturalHeight
+        );
+        setZoom(fitScale * 100);
+    }
+
+    function initializeCanvas() {
+        canvas.width = rawImg.naturalWidth;
+        canvas.height = rawImg.naturalHeight;
+        updateDisplayedImageSize();
+        drawBoxes();
+    }
+
+    if (rawImg.complete && rawImg.naturalWidth) {
+        initializeCanvas();
+    } else {
+        rawImg.addEventListener('load', initializeCanvas, { once: true });
+    }
+
+    zoomRange.addEventListener('input', event => setZoom(Number(event.target.value)));
+    document.getElementById('zoom-out').addEventListener('click', () => setZoom(zoomScale * 100 - 10));
+    document.getElementById('zoom-in').addEventListener('click', () => setZoom(zoomScale * 100 + 10));
+    document.getElementById('zoom-fit').addEventListener('click', fitImageToWorkspace);
+
+    canvasContainer.addEventListener('wheel', event => {
+        if (!event.ctrlKey && !event.metaKey) return;
+
+        event.preventDefault();
+        const direction = event.deltaY < 0 ? 10 : -10;
+        setZoom(zoomScale * 100 + direction, event.clientX, event.clientY);
+    }, { passive: false });
+
+    function getCanvasPoint(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: Math.min(canvas.width, Math.max(0, (event.clientX - rect.left) * canvas.width / rect.width)),
+            y: Math.min(canvas.height, Math.max(0, (event.clientY - rect.top) * canvas.height / rect.height))
+        };
+    }
+
+
+    // ─────────────────────────────────────────────
+    // Start drawing
+    // ─────────────────────────────────────────────
+    canvas.addEventListener("mousedown", (event) => {
+        if (event.button !== 0) return;
+
+        const point = getCanvasPoint(event);
+        startX = point.x;
+        startY = point.y;
+        isDrawing = true;
+    });
+
+
+    // ─────────────────────────────────────────────
+    // Mouse move (draw OR hover)
+    // ─────────────────────────────────────────────
+    canvas.addEventListener("mousemove", (event) => {
+        const { x: mouseX, y: mouseY } = getCanvasPoint(event);
+
+        // Drawing mode
+        if (isDrawing) {
+            currentX = mouseX;
+            currentY = mouseY;
+
+            drawBoxes();
+
+            const [x, y, w, h] = getBoxFromPoints(startX, startY, currentX, currentY);
+            ctx.beginPath();
+            ctx.rect(x, y, w, h);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            return;
+        }
+
+        // Hover detection
+        hoveredBoxIndex = null;
+        boxes.forEach((box, index) => {
+            if (isPointInBox(mouseX, mouseY, box)) {
+                hoveredBoxIndex = index;
+            }
+        });
+
+        drawBoxes();
+    });
+
+
+    // ─────────────────────────────────────────────
+    // Clear hover when leaving canvas
+    // ─────────────────────────────────────────────
+    canvas.addEventListener("mouseleave", () => {
+        hoveredBoxIndex = null;
+        drawBoxes();
+    });
+
+
+    // ─────────────────────────────────────────────
+    // Finish drawing
+    // ─────────────────────────────────────────────
+    canvas.addEventListener("mouseup", (event) => {
+        if (!isDrawing) return;
+        isDrawing = false;
+
+        const { x: endX, y: endY } = getCanvasPoint(event);
+
+        const [x, y, w, h] = getBoxFromPoints(startX, startY, endX, endY).map(Math.round);
+
+        if (w > 2 && h > 2) {
+            boxes.push([x, y, w, h, "Unlabeled", 1.0, -1]);
+            update_boxes[boxes.length - 1] = boxes.at(-1)
+            drawBoxes();
+        }
+    });
+
+
+    // ─────────────────────────────────────────────
+    // Right-click delete box
+    // ─────────────────────────────────────────────
+    canvas.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        const { x: mouseX, y: mouseY } = getCanvasPoint(event);
+
+        const clickedIndex = boxes.findIndex(box => isPointInBox(mouseX, mouseY, box));
+
+        if (clickedIndex !== -1) {
+            boxes[clickedIndex][5] = -1
+            update_boxes.push(boxes[clickedIndex])
+            boxes.splice(clickedIndex, 1);
+            drawBoxes();
+        }
+    });
+
+
+    // ─────────────────────────────────────────────
+    // Utilities
+    // ─────────────────────────────────────────────
+    function isPointInBox(x, y, box) {
+        return (
+            x >= box[0] &&
+            x <= box[0] + box[2] &&
+            y >= box[1] &&
+            y <= box[1] + box[3]
+        );
+    }
+
+    function getBoxFromPoints(x1, y1, x2, y2) {
+        const x = Math.min(x1, x2);
+        const y = Math.min(y1, y2);
+        const w = Math.abs(x2 - x1);
+        const h = Math.abs(y2 - y1);
+        return [x, y, w, h];
+    }
+
+
+    // ─────────────────────────────────────────────
+    // Drawing
+    // ─────────────────────────────────────────────
+    function drawBoxes() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        boxes.forEach((box, index) => {
+            const [x, y, w, h, title, confidence] = box;
+
+            ctx.beginPath();
+            ctx.rect(x, y, w, h);
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            if (index === hoveredBoxIndex && title) {
+                drawTitleBox(x, y, title, confidence);
+            }
+        });
+    }
+
+    function drawTitleBox(x, y, label, confidence) {
+        ctx.font = "14px Arial";
+        ctx.textBaseline = "top";
+
+        const padding = 6;
+        const confText = confidence !== undefined
+            ? ` (${Math.round(confidence * 100)}%)`
+            : "";
+
+        const text = label + confText;
+
+        const textWidth = ctx.measureText(text).width;
+        const boxWidth = textWidth + padding * 2;
+        const boxHeight = 22;
+
+        let boxX = x;
+        let boxY = y - boxHeight - 6;
+
+        if (boxY < 0) boxY = y + 4;
+
+        ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+        ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+
+        ctx.fillStyle = "white";
+        ctx.fillText(text, boxX + padding, boxY + 4);
+    }
+
+    // ─────────────────────────────────────────────
+    // Double-click to rename box
+    // ─────────────────────────────────────────────
+    canvas.addEventListener("dblclick", (event) => {
+        const { x: mouseX, y: mouseY } = getCanvasPoint(event);
+
+        const clickedIndex = boxes.findIndex(box =>
+            isPointInBox(mouseX, mouseY, box)
+        );
+
+        if (clickedIndex !== -1) {
+            const currentTitle = boxes[clickedIndex][4] || "";
+            const newTitle = prompt("Enter new title:", currentTitle);
+
+            if (newTitle !== null && newTitle.trim() !== "") {
+                boxes[clickedIndex][4] = newTitle.trim();
+                boxes[clickedIndex][5] = 1
+                update_boxes[clickedIndex] = boxes[clickedIndex]
+                drawBoxes();
+            }
+        }
+    });
+
+
+    // ─────────────────────────────────────────────
+    // Image toggle
+    // ─────────────────────────────────────────────
+    function toggle_class_images() {
+        rawImg.classList.toggle("img_classification_none");
+        maskImg.classList.toggle("img_classification_none");
+
+        const maskVisible = !maskImg.classList.contains("img_classification_none");
+        const toggleButton = document.getElementById("mask-view-toggle");
+        const nextAction = maskVisible ? "Show original image" : "Show segmentation mask";
+        toggleButton.setAttribute("aria-pressed", String(maskVisible));
+        toggleButton.setAttribute("aria-label", nextAction);
+        toggleButton.title = nextAction;
+        toggleButton.querySelector("i").className = maskVisible
+            ? "fa-regular fa-image"
+            : "fa-solid fa-layer-group";
+        toggleButton.querySelector(".label").textContent = maskVisible ? "Show Image" : "Show Mask";
+    }
+
+    function removeAllBoxes() {
+        update_boxes = [];
+        boxes = [];
+        hoveredBoxIndex = null;
+        drawBoxes();
+    }
+
+
+    // ─────────────────────────────────────────────
+    // Send data back to backend
+    // ─────────────────────────────────────────────
+    function showClassificationProgress(total) {
+        classificationProgress.max = Math.max(total, 1);
+        classificationProgress.value = 0;
+        classificationProgressTitle.textContent = total
+            ? `Preparing ${total} image${total === 1 ? '' : 's'}`
+            : 'Saving empty classification';
+        classificationProgressDetail.textContent = total
+            ? `0 of ${total} images completed`
+            : 'Removing all saved boxes…';
+        classificationProgressDismiss.classList.add('hidden');
+        overlay.setAttribute('aria-hidden', 'false');
+        overlay.classList.remove('hidden');
+    }
+
+    function updateClassificationProgress(event) {
+        const total = event.total || 0;
+        classificationProgress.max = Math.max(total, 1);
+        classificationProgress.value = event.current || 0;
+        if (event.phase === 'classifying') {
+            classificationProgressTitle.textContent = `Classifying image ${event.item} of ${total}`;
+        } else if (event.phase === 'classified') {
+            classificationProgressTitle.textContent = `Classified image ${event.item} of ${total}`;
+        }
+        classificationProgressDetail.textContent = `${event.current || 0} of ${total} images completed`;
+    }
+
+    function showClassificationError(message) {
+        classificationProgressTitle.textContent = 'Classification failed';
+        classificationProgressDetail.textContent = message;
+        classificationProgressDismiss.classList.remove('hidden');
+    }
+
+    classificationProgressDismiss.addEventListener('click', () => {
+        overlay.classList.add('hidden');
+        overlay.setAttribute('aria-hidden', 'true');
+    });
+
+    async function sendBoxesToBackend() {
+        showClassificationProgress(boxes.length);
+
+        try {
+            const response = await fetch('/save_boxes', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/x-ndjson'
+                },
+                body: JSON.stringify({ boxes })
+            });
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Classification request failed.');
+            }
+            if (!response.body) {
+                throw new Error('Progress updates are unavailable in this browser.');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let completed = false;
+
+            while (true) {
+                const { value, done } = await reader.read();
+                buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+                const lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    const event = JSON.parse(line);
+                    if (event.status === 'progress') {
+                        updateClassificationProgress(event);
+                    } else if (event.status === 'error') {
+                        throw new Error(event.error);
+                    } else if (event.status === 'success') {
+                        completed = true;
+                    }
+                }
+                if (done) break;
+            }
+
+            if (buffer.trim()) {
+                const event = JSON.parse(buffer);
+                if (event.status === 'error') throw new Error(event.error);
+                if (event.status === 'success') completed = true;
+            }
+            if (!completed) throw new Error('Classification ended before completion.');
+
+            classificationProgress.value = classificationProgress.max;
+            classificationProgressTitle.textContent = 'Classification complete';
+            location.reload();
+        } catch (error) {
+            console.error('Error classifying boxes:', error);
+            showClassificationError(error.message);
+        }
+
+    }
+
+
+    // ─────────────────────────────────────────────
+    // Update database with userinput
+    // ─────────────────────────────────────────────
+    function updateChangesToDB() {
+        fetch('/update_boxes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ update_boxes, boxes })
+        })
+            .then(res => res.json())
+            .then(data => {
+                console.log("Server response:", data);
+                location.reload()
+            })
+            .catch(err => console.error("Error sending boxes:", err));
+    }
+
+
+
+    // ─────────────────────────────────────────────
+    // mask slider functions
+    // ─────────────────────────────────────────────
+
+
+    function detectBoundingBox() {
+        const data = {};
+
+        fetch('/mask_slider', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.img_data_mask) {
+                    const maskImg = document.getElementById('mask_img');
+                    maskImg.src = `data:image/jpeg;base64,${data.img_data_mask}`;
+                }
+
+                if (data.img_boxes) {
+                    // Update the data-boxes attribute with new box data
+                    canvas.dataset.boxes = data.img_boxes;
+                    boxes = JSON.parse(canvas.dataset.boxes)
+
+
+                    // Optionally re-render the boxes on the canvas
+                    drawBoxes();
+                }
+            })
+            .catch(error => {
+                console.error('Error updating mask image:', error);
+            });
+    }
+
+    // ─────────────────────────────────────────────
+    // Bar Chart function
+    // ─────────────────────────────────────────────
+
+    const speciesCounts = {};
+
+    boxes.forEach(item => {
+        const species = item[4];
+        speciesCounts[species] = (speciesCounts[species] || 0) + 1;
+    });
+
+    const labels = Object.keys(speciesCounts);
+    const counts = Object.values(speciesCounts);
+    const colors = labels.map((_, i) =>
+        `hsl(${(i * 360) / labels.length}, 70%, 55%)`
+    );
+
+    new Chart(document.getElementById("speciesChart"), {
+        type: "bar",
+        data: {
+            labels,
+            datasets: [{
+                label: "Species Count",
+                data: counts,
+                backgroundColor: colors
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: {
+                        font: {
+                            size: 25 // font size in pixels
+                        },
+                        color: 'white' // font color
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        font: {
+                            size: 14 // font size for y-axis ticks
+                        },
+                        color: 'white' // font color for y-axis ticks
+                    }
+                },
+                x: {
+                    ticks: {
+                        font: {
+                            size: 18 // font size for x-axis ticks
+                        },
+                        color: 'white' // font color for x-axis ticks
+                    }
+                }
+            },
+            onClick: (evt, elements) => {
+                if (elements.length > 0) {
+                    const chart = elements[0].element.$context.chart;
+                    const datasetIndex = elements[0].datasetIndex;
+                    const index = elements[0].index;
+                    const label = chart.data.labels[index];
+                    const value = chart.data.datasets[datasetIndex].data[index];
+                    const currentPath = window.location.pathname; // full URL
+                    const url = `${currentPath}/${encodeURIComponent(label)}`;
+                    window.location.href = url;
+
+                }
+            }
+        }
+    });
+
+    function showGraph() {
+        const chartContainer = document.getElementById("chart-container");
+        const summaryButton = document.getElementById("summary-toggle");
+        const isVisible = !chartContainer.classList.toggle("hidden");
+        const nextAction = isVisible ? "Hide classification summary" : "Show classification summary";
+        summaryButton.setAttribute("aria-pressed", String(isVisible));
+        summaryButton.setAttribute("aria-label", nextAction);
+        summaryButton.title = nextAction;
+        summaryButton.querySelector("i").className = isVisible
+            ? "fa-solid fa-xmark"
+            : "fa-solid fa-chart-column";
+        summaryButton.querySelector(".label").textContent = isVisible ? "Hide Summary" : "Show Summary";
+    }
+
+    // ─────────────────────────────────────────────
+    // Mask Slider behavior in bottom bar
+    // ─────────────────────────────────────────────
+
+
+</script>
+
+{% endblock content %}

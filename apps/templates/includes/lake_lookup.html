@@ -1,0 +1,16 @@
+<section class="lake-lookup-panel" data-lake-lookup data-endpoint="{{ url_for('lake_metadata_search') }}">
+  <div>
+    <h3><i class="fa-solid fa-magnifying-glass-location" aria-hidden="true"></i> Find lake metadata</h3>
+    <p>Enter a lake name and optionally select its country, then confirm the correct result.</p>
+  </div>
+  <div class="lake-lookup-actions">
+    <button type="button" class="btn-secondary" data-lake-search>
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Search Wikidata
+    </button>
+    <button type="button" class="text-button" data-lake-manual>Use manual entry</button>
+  </div>
+  <p class="lake-lookup-status" data-lake-status role="status" aria-live="polite">
+    Internet unavailable? Manual entry only requires the lake name and country.
+  </p>
+  <div class="lake-lookup-results" data-lake-results hidden></div>
+</section>

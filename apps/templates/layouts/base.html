@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  {% include 'includes/head.html' %}
+  {% block page_styles %}{% endblock page_styles %}
+  {% block head_scripts %}{% endblock head_scripts %}
+</head>
+
+<body>
+  <header class="navbar">
+    <a class="brand" href="{{ url_for('index') }}" aria-label="PlanktonLab home">
+      <span class="brand-mark"><i class="fa-solid fa-water" aria-hidden="true"></i></span>
+      <span>PlanktonLab</span>
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation"
+      aria-label="Toggle navigation">
+      <i class="fa-solid fa-bars" aria-hidden="true"></i>
+    </button>
+    <nav aria-label="Primary navigation">
+      <ul id="primary-navigation">
+      <li>
+        <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' else '' }}"
+          {% if request.endpoint == 'index' %}aria-current="page"{% endif %}>
+          <i class="fas fa-home" aria-hidden="true"></i><span>Home</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('select_source') }}"
+          class="{{ 'active' if request.endpoint in ['setup', 'select_source', 'load_from_db', 'show_all_images'] else '' }}"
+          {% if request.endpoint in ['setup', 'select_source', 'load_from_db', 'show_all_images'] %}aria-current="page"{% endif %}>
+          <i class="fas fa-image" aria-hidden="true"></i><span>Classification</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('pages_database') }}"
+          class="{{ 'active' if request.endpoint in ['pages_database', 'tables_builder', 'add_data'] else '' }}"
+          {% if request.endpoint in ['pages_database', 'tables_builder', 'add_data'] %}aria-current="page"{% endif %}>
+          <i class="fas fa-database" aria-hidden="true"></i><span>Database</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('query_builder') }}" class="{{ 'active' if request.endpoint == 'query_builder' else '' }}"
+          {% if request.endpoint == 'query_builder' %}aria-current="page"{% endif %}>
+          <i class="fa-solid fa-magnifying-glass-chart" aria-hidden="true"></i><span>Data explorer</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('training_page') }}" class="{{ 'active' if request.endpoint == 'training_page' else '' }}"
+          {% if request.endpoint == 'training_page' %}aria-current="page"{% endif %}>
+          <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i><span>Training</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('documentation') }}" class="{{ 'active' if request.endpoint == 'documentation' else '' }}"
+          {% if request.endpoint == 'documentation' %}aria-current="page"{% endif %}>
+          <i class="fa-solid fa-book-open" aria-hidden="true"></i><span>Documentation</span>
+        </a>
+      </li>
+      </ul>
+    </nav>
+  </header>
+  <div class="wrapper">
+    <main class="main-panel">{% block content %}{% endblock content %}</main>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-messages" role="status" aria-live="polite">
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endwith %}
+  <script>
+    const navigationToggle = document.querySelector('.nav-toggle');
+    const primaryNavigation = document.getElementById('primary-navigation');
+
+    navigationToggle.addEventListener('click', () => {
+      const isOpen = navigationToggle.getAttribute('aria-expanded') === 'true';
+      navigationToggle.setAttribute('aria-expanded', String(!isOpen));
+      primaryNavigation.classList.toggle('open', !isOpen);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        navigationToggle.setAttribute('aria-expanded', 'false');
+        primaryNavigation.classList.remove('open');
+      }
+    });
+  </script>
+  {% block page_scripts %}{% endblock page_scripts %}
+</body>
+
+</html>

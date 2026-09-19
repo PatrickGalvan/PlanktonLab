@@ -1,0 +1,604 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/form.css') }}?v=2.0.0" rel="stylesheet" />
+<link href="{{ url_for('static', filename='assets/css/training_page.css') }}?v=5.1.0" rel="stylesheet" />
+{% endblock page_styles %}
+{% block content %}
+<div class="training-page">
+<header class="training-hero">
+    <div>
+        <p class="page-eyebrow">Model lifecycle</p>
+        <h1>Training workspace</h1>
+        <p class="page-subtitle">Move from reviewed observations to a deployable classifier.</p>
+    </div>
+    <div class="workspace-metrics" aria-label="Training workspace summary">
+        <div><strong>{{ training_species|sum(attribute='reviewed') }}</strong><span>reviewed samples</span></div>
+        <div><strong>{{ training_species|length }}</strong><span>taxa available</span></div>
+        <div><strong>{{ model_versions|length }}</strong><span>model versions</span></div>
+    </div>
+</header>
+
+<section class="workflow-grid" aria-label="Training workflow">
+    <article class="workflow-card workflow-card-primary">
+        <div class="workflow-card-topline"><span>01</span><i class="fa-solid fa-database" aria-hidden="true"></i></div>
+        <h2>Build a dataset</h2>
+        <p>Choose labels, balance classes, split validation data, and add augmentation.</p>
+        <button type="button" id="training_set" class="workflow-action" onclick="openTrainingExport()">
+            Configure export <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        </button>
+    </article>
+
+    <article class="workflow-card">
+        <div class="workflow-card-topline"><span>02</span><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i></div>
+        <h2>Train the classifier</h2>
+        <p>Follow the focused FastAI workflow from Colab setup through model export.</p>
+        <button type="button" id="training_code" class="workflow-action workflow-action-secondary"
+            onclick="toggleTrainingGuide()" aria-expanded="false" aria-controls="training_instruction_container">
+            <span id="training-guide-button-label">Open training guide</span>
+            <i id="training-guide-button-icon" class="fa-solid fa-arrow-down" aria-hidden="true"></i>
+        </button>
+    </article>
+
+    <article class="workflow-card">
+        <div class="workflow-card-topline"><span>03</span><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i></div>
+        <h2>Install a model</h2>
+        <p>Register a trusted FastAI learner without replacing earlier versions.</p>
+        <button type="button" id="model-upload-trigger" class="workflow-action workflow-action-secondary"
+            onclick="openModelUpload()" aria-haspopup="dialog" aria-controls="model-upload-dialog">
+            Upload model version <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        </button>
+    </article>
+</section>
+
+<dialog id="model-upload-dialog" class="model-upload-dialog" aria-labelledby="model-upload-title">
+    <form class="model-upload-form" method="POST" action="{{ url_for('upload_model') }}" enctype="multipart/form-data">
+        <header class="model-upload-dialog-header">
+            <div>
+                <p class="page-eyebrow">Model library</p>
+                <h2 id="model-upload-title">Upload model version</h2>
+                <p>Register and activate a trusted FastAI learner.</p>
+            </div>
+            <button type="button" class="dialog-close" onclick="closeModelUpload()" aria-label="Close model upload">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+        </header>
+        <div class="model-upload-dialog-body">
+            <div class="form-group">
+                <label for="model_name">Model name</label>
+                <input id="model_name" name="model_name" type="text" maxlength="120"
+                    placeholder="Defaults to filename" />
+            </div>
+            <div class="form-group">
+                <label for="model_file">FastAI learner (.pkl)</label>
+                <div class="file-upload-wrapper">
+                    <span class="file-upload-button">Choose file</span>
+                    <span class="file-selected" id="model-file-name">No file selected</span>
+                    <input type="file" id="model_file" name="model_file" accept=".pkl" required />
+                </div>
+            </div>
+            <p class="model-security-note">
+                <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+                Trusted pickle files only.
+            </p>
+        </div>
+        <footer class="model-upload-dialog-footer">
+            <button type="button" class="btn-secondary" onclick="closeModelUpload()">Cancel</button>
+            <button type="submit" class="btn-action">
+                <i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i> Upload and activate
+            </button>
+        </footer>
+    </form>
+</dialog>
+
+<section class="model-hub" aria-labelledby="model-library-title">
+    <header class="model-hub-header">
+        <div>
+            <p class="section-kicker">Runtime</p>
+            <h2 id="model-library-title">Model library</h2>
+        </div>
+        <span class="model-count">{{ model_versions|length }} version{{ '' if model_versions|length == 1 else 's' }}</span>
+    </header>
+    {% if selected_model %}
+    <div class="current-model-summary">
+        <span class="current-model-icon"><i class="fa-solid fa-bolt" aria-hidden="true"></i></span>
+        <div>
+            <span>In use for this session</span>
+            <strong>{{ selected_model.name }}</strong>
+        </div>
+        <code title="{{ selected_model.version }}">{{ selected_model.version[:12] }}</code>
+    </div>
+    {% endif %}
+    <details class="model-library-disclosure"{% if not selected_model %} open{% endif %}>
+        <summary>
+            <span>Manage all versions</span>
+            <span class="summary-hint">Session and default selection <i class="fa-solid fa-chevron-down" aria-hidden="true"></i></span>
+        </summary>
+    {% if model_versions %}
+    <div class="model-list">
+        {% for model in model_versions %}
+        <article class="model-row{% if selected_model and selected_model.id == model.id %} is-selected{% endif %}">
+            <div class="model-details">
+                <div class="model-title-line">
+                    <h3>{{ model.name }}</h3>
+                    {% if model.is_active %}<span class="model-badge default">Default</span>{% endif %}
+                    {% if selected_model and selected_model.id == model.id %}<span class="model-badge selected">In use</span>{% endif %}
+                </div>
+                <code title="{{ model.version }}">{{ model.version[:12] }}</code>
+                <span>Uploaded {{ model.created_at.strftime('%Y-%m-%d %H:%M') if model.created_at else 'Unknown' }} UTC</span>
+            </div>
+            <div class="model-actions">
+                <form method="POST" action="{{ url_for('select_model') }}">
+                    <input type="hidden" name="model_version_id" value="{{ model.id }}" />
+                    <input type="hidden" name="next" value="{{ url_for('training_page') }}" />
+                    <button type="submit" class="btn-secondary"{% if selected_model and selected_model.id == model.id %} disabled{% endif %}>
+                        Use this session
+                    </button>
+                </form>
+                <form method="POST" action="{{ url_for('set_default_model', model_version_id=model.id) }}">
+                    <input type="hidden" name="next" value="{{ url_for('training_page') }}" />
+                    <button type="submit" class="btn-secondary"{% if model.is_active %} disabled{% endif %}>
+                        Set default
+                    </button>
+                </form>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="model-empty-state">
+        <i class="fa-solid fa-cubes" aria-hidden="true"></i>
+        <p>No models have been registered yet. Upload a trusted learner to enable automated classification.</p>
+    </div>
+    {% endif %}
+    </details>
+</section>
+
+<dialog id="training-export-dialog" class="training-export-dialog" aria-labelledby="training-export-title">
+    <form method="POST" action="{{ url_for('download_samples_by_species') }}" id="training-export-form">
+        <input type="hidden" name="species_targets" id="species-targets" value="{}" />
+        <header class="export-dialog-header">
+            <div>
+                <p class="page-eyebrow">Dataset builder</p>
+                <h2 id="training-export-title">Create training set</h2>
+                <p>Choose trusted labels, class distribution, split, and augmentation.</p>
+            </div>
+            <button type="button" class="dialog-close" onclick="closeTrainingExport()" aria-label="Close">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+        </header>
+
+        <div class="export-dialog-body">
+            <div class="export-options">
+            <fieldset class="export-section">
+                <legend>1. Review status</legend>
+                <div class="segmented-control">
+                    <label>
+                        <input type="radio" name="review_scope" value="reviewed" checked />
+                        <span>Reviewed only</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="review_scope" value="all" />
+                        <span>Include unreviewed</span>
+                    </label>
+                </div>
+                <p class="field-help">Reviewed-only exports are recommended for reliable labels.</p>
+            </fieldset>
+
+            <fieldset class="export-section">
+                <legend>2. Species</legend>
+                <div class="export-section-heading">
+                    <span>Select one or more classes</span>
+                    <button type="button" class="text-button" onclick="toggleAllSpecies(true)">Select available</button>
+                </div>
+                <div class="species-selection-list">
+                    {% for item in training_species %}
+                    <div class="species-export-row" data-reviewed="{{ item.reviewed }}" data-total="{{ item.total }}">
+                        <input id="export-species-{{ loop.index0 }}" type="checkbox" name="species" value="{{ item.species }}"
+                            {% if item.reviewed %}checked{% else %}disabled{% endif %} />
+                        <label class="species-export-name" for="export-species-{{ loop.index0 }}">{{ item.species }}</label>
+                        <span class="species-available-count">{{ item.reviewed }} available</span>
+                        <input class="custom-species-target" type="number" min="1" max="10000"
+                            value="{{ item.reviewed if item.reviewed else item.total }}"
+                            aria-label="Target samples for {{ item.species }}" />
+                    </div>
+                    {% endfor %}
+                </div>
+            </fieldset>
+
+            <fieldset class="export-section">
+                <legend>3. Distribution and split</legend>
+                <div class="export-fields-grid">
+                    <div class="form-group">
+                        <label for="distribution">Class distribution</label>
+                        <select id="distribution" name="distribution">
+                            <option value="natural">Natural (imbalanced)</option>
+                            <option value="balanced">Balanced</option>
+                            <option value="custom">Custom per species</option>
+                        </select>
+                    </div>
+                    <div class="form-group balanced-target-field inactive">
+                        <label for="target-per-species">Base samples per species</label>
+                        <input id="target-per-species" name="target_per_species" type="number"
+                            min="1" max="10000" value="100" />
+                    </div>
+                    <div class="form-group">
+                        <label for="validation-percent">Validation split (%)</label>
+                        <input id="validation-percent" name="validation_percent" type="number"
+                            min="1" max="40" value="20" />
+                    </div>
+                    <div class="form-group">
+                        <label for="export-seed">Random seed</label>
+                        <input id="export-seed" name="seed" type="number"
+                            min="0" max="4294967295" value="42" />
+                    </div>
+                </div>
+                <p class="field-help">The split keeps crops from the same source image together whenever possible.</p>
+            </fieldset>
+
+            <details class="export-section export-optional">
+                <summary>
+                    <span>4. Augmentation</span>
+                    <span>Optional <i class="fa-solid fa-chevron-down" aria-hidden="true"></i></span>
+                </summary>
+                <div class="augmentation-grid">
+                    {% set augmentation_options = [
+                        ('rotate', 'Rotation'),
+                        ('horizontal_flip', 'Horizontal flip'),
+                        ('vertical_flip', 'Vertical flip'),
+                        ('brightness_contrast', 'Brightness & contrast'),
+                        ('zoom', 'Mild zoom'),
+                        ('noise', 'Sensor noise'),
+                        ('blur', 'Mild blur')
+                    ] %}
+                    {% for value, label in augmentation_options %}
+                    <label class="option-check">
+                        <input type="checkbox" name="augmentations" value="{{ value }}" />
+                        <span>{{ label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <div class="form-group augmentation-copies-field">
+                    <label for="augmentation-copies">Extra augmented copies per training image</label>
+                    <input id="augmentation-copies" name="augmentation_copies" type="number"
+                        min="0" max="10" value="0" />
+                </div>
+                <p class="field-help">Copy multipliers apply to natural exports. Balanced/custom exports use augmentation only to reach their exact targets.</p>
+            </details>
+            </div>
+
+            <aside class="export-preview" aria-live="polite">
+                <div>
+                    <strong>Export preview</strong>
+                    <span id="export-summary">Choose at least one available species.</span>
+                </div>
+                <div class="export-preview-table-wrap">
+                    <table class="export-preview-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Species</th>
+                                <th scope="col">Available</th>
+                                <th scope="col">Base</th>
+                                <th scope="col">Augmented</th>
+                                <th scope="col">Final</th>
+                            </tr>
+                        </thead>
+                        <tbody id="export-preview-rows"></tbody>
+                    </table>
+                </div>
+                <p id="export-warning" class="export-warning"></p>
+            </aside>
+        </div>
+
+        <footer class="export-dialog-footer">
+            <button type="button" class="btn-secondary" onclick="closeTrainingExport()">Cancel</button>
+            <button type="submit" class="btn-action" id="create-export-button">
+                <i class="fa-solid fa-download" aria-hidden="true"></i> Build and download ZIP
+            </button>
+        </footer>
+    </form>
+</dialog>
+
+<section class="training-guide inactive" id="training_instruction_container" aria-labelledby="training-guide-title">
+    <header class="training-guide-header">
+        <div>
+            <p class="section-kicker">Guided workflow</p>
+            <h2 id="training-guide-title">Train in Google Colab</h2>
+        </div>
+        <button type="button" class="guide-close" onclick="toggleTrainingGuide()" aria-label="Close training guide">
+            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+    </header>
+    <div class="ts-gallery">
+        <div class="ts-section active">
+            <h3>1. Set up Google Colab</h3>
+            <li>Navigate to: <strong><a href="https://colab.research.google.com/"> Google Colab</a></strong></li>
+            <li>Set Runtime to "GPU"</li>
+            <li>Upload this <strong><a href="/static/assets/files/requirements_training.txt" download>
+                        requirements
+                    </a></strong> file into the runtime</li>
+            <li>Upload your zipped Training Set into the runtime</li>
+            <li>Run the following commands in a code block</li>
+            <pre><code class="code-block">
+    # Install requirements
+    !pip install -r '/content/requirements_training.txt'
+    # unzip trainingsdata
+    !unzip /content/[your_trainingset].zip
+            </code></pre>
+        </div>
+        <div class="ts-section">
+            <h3>2. Configure the training run</h3>
+            <li>Open new Code Block and run the following Code:</li>
+            <pre><code class="code-block">
+    # Global Variables
+    from fastai.vision import *
+    from fastai.vision.all import *
+    import numpy as np
+    
+    path = '/content/[your_trainingset]'
+    num_of_epochs = 10
+    data = ImageDataLoaders.from_folder(
+        path,
+        train="train",
+        valid="valid",
+        item_tfms=Resize(224),
+        num_workers=4,
+        batch_tfms=[Normalize.from_stats(*imagenet_stats)])
+    learn = vision_learner(
+        data,
+        models.resnet18,
+        metrics=[error_rate, accuracy])
+        
+        print(
+            f"Classes : {data.vocab} \n training_set_size: {len(data.train_ds)} \n validatiion_set_size: {len(data.valid_ds)}"
+            )
+                </code></pre>
+        </div>
+        <div class="ts-section">
+            <h3>3. Train the model</h3>
+            <li>Run Code to train your Model</li>
+            <pre><code class="code-block">
+    # train model
+    learn.fit_one_cycle(num_of_epochs)
+    learn.save('Zooplankton-v2-resnet18-stage-1')
+    # Re-run following lines for further training
+    learn.unfreeze()
+    lr = learn.lr_find()
+    learn.fit_one_cycle(num_of_epochs, lr = lr.suggestion())
+    learn.save('Zooplankton-v2-resnet18-stage-2')
+                </code></pre>
+        </div>
+        <div class="ts-section">
+            <h3>4. Export the model</h3>
+            <li>Save Model to runtime and Download it to your filedestination</li>
+            <pre><code class="code-block">
+    # export Model
+    learn.export('/content/[your_models_name].pkl')
+                </code></pre>
+        </div>
+    </div>
+    <footer class="guide-controls">
+        <button type="button" class="btn-secondary" onclick="changeGuideStep(-1)">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Previous
+        </button>
+        <span id="guide-progress">Step 1 of 4</span>
+        <button type="button" class="btn-secondary" onclick="changeGuideStep(1)">
+            Next <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        </button>
+    </footer>
+</section>
+</div>
+
+<script>
+    const sections = document.querySelectorAll('.ts-section');
+    let currentIndex = 0;
+
+    function updateGallery() {
+        sections.forEach((section, index) => {
+            const isActive = index === currentIndex;
+            section.classList.toggle('active', isActive);
+            section.hidden = !isActive;
+        });
+        document.getElementById('guide-progress').textContent =
+            `Step ${currentIndex + 1} of ${sections.length}`;
+    }
+    // Initialize
+    updateGallery();
+    function changeGuideStep(direction) {
+        currentIndex = (currentIndex + direction + sections.length) % sections.length;
+        updateGallery();
+    }
+
+    function toggleTrainingGuide() {
+        const guide = document.getElementById('training_instruction_container');
+        guide.classList.toggle('inactive');
+        const isOpen = !guide.classList.contains('inactive');
+        const button = document.getElementById('training_code');
+        button.setAttribute('aria-expanded', String(isOpen));
+        document.getElementById('training-guide-button-label').textContent =
+            isOpen ? 'Close training guide' : 'Open training guide';
+        document.getElementById('training-guide-button-icon').className =
+            `fa-solid ${isOpen ? 'fa-arrow-up' : 'fa-arrow-down'}`;
+        if (isOpen) guide.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    const modelUploadDialog = document.getElementById('model-upload-dialog');
+    const modelUploadTrigger = document.getElementById('model-upload-trigger');
+
+    function openModelUpload() {
+        modelUploadDialog.showModal();
+        requestAnimationFrame(() => document.getElementById('model_name').focus());
+    }
+
+    function closeModelUpload() {
+        modelUploadDialog.close();
+        modelUploadTrigger.focus();
+    }
+
+    modelUploadDialog.addEventListener('cancel', event => {
+        event.preventDefault();
+        closeModelUpload();
+    });
+
+    modelUploadDialog.addEventListener('click', event => {
+        if (event.target === modelUploadDialog) closeModelUpload();
+    });
+
+    document.getElementById('model_file').addEventListener('change', event => {
+        const fileName = event.target.files[0]?.name || 'No file selected';
+        document.getElementById('model-file-name').textContent = fileName;
+    });
+
+    const exportDialog = document.getElementById('training-export-dialog');
+    const exportForm = document.getElementById('training-export-form');
+    const speciesRows = Array.from(document.querySelectorAll('.species-export-row'));
+    const distribution = document.getElementById('distribution');
+    const targetPerSpecies = document.getElementById('target-per-species');
+    const validationPercent = document.getElementById('validation-percent');
+    const augmentationCopies = document.getElementById('augmentation-copies');
+
+    function openTrainingExport() {
+        updateExportPreview();
+        exportDialog.showModal();
+    }
+
+    function closeTrainingExport() {
+        exportDialog.close();
+    }
+
+    function activeReviewScope() {
+        return exportForm.querySelector('input[name="review_scope"]:checked').value;
+    }
+
+    function selectedAugmentations() {
+        return exportForm.querySelectorAll('input[name="augmentations"]:checked');
+    }
+
+    function toggleAllSpecies(select) {
+        speciesRows.forEach(row => {
+            const checkbox = row.querySelector('input[name="species"]');
+            if (!checkbox.disabled) checkbox.checked = select;
+        });
+        updateExportPreview();
+    }
+
+    function updateSpeciesAvailability() {
+        const countKey = activeReviewScope() === 'reviewed' ? 'reviewed' : 'total';
+        speciesRows.forEach(row => {
+            const available = Number(row.dataset[countKey]);
+            const checkbox = row.querySelector('input[name="species"]');
+            const target = row.querySelector('.custom-species-target');
+            checkbox.disabled = available === 0;
+            if (available === 0) checkbox.checked = false;
+            row.classList.toggle('is-unavailable', available === 0);
+            row.querySelector('.species-available-count').textContent = `${available} available`;
+            if (!target.dataset.edited) target.value = Math.max(1, available);
+        });
+    }
+
+    function updateDistributionFields() {
+        document.querySelector('.balanced-target-field').classList.toggle(
+            'inactive', distribution.value !== 'balanced'
+        );
+        speciesRows.forEach(row => {
+            row.classList.toggle('show-custom-target', distribution.value === 'custom');
+        });
+        document.querySelector('.augmentation-copies-field').classList.toggle(
+            'inactive', distribution.value !== 'natural'
+        );
+    }
+
+    function updateExportPreview() {
+        updateSpeciesAvailability();
+        updateDistributionFields();
+        const selectedRows = speciesRows.filter(row =>
+            row.querySelector('input[name="species"]').checked
+        );
+        const validationRatio = Math.min(40, Math.max(1, Number(validationPercent.value) || 20)) / 100;
+        const copies = distribution.value === 'natural'
+            ? Math.min(10, Math.max(0, Number(augmentationCopies.value) || 0))
+            : 0;
+        const hasAugmentation = selectedAugmentations().length > 0;
+        const preview = document.getElementById('export-preview-rows');
+        const warnings = [];
+        let total = 0;
+
+        preview.replaceChildren();
+        selectedRows.forEach(row => {
+            const available = Number(row.dataset[activeReviewScope() === 'reviewed' ? 'reviewed' : 'total']);
+            let base = available;
+            if (distribution.value === 'balanced') {
+                base = Math.max(1, Number(targetPerSpecies.value) || 1);
+            } else if (distribution.value === 'custom') {
+                base = Math.max(1, Number(row.querySelector('.custom-species-target').value) || 1);
+            }
+            const originals = Math.min(base, available);
+            const trainingOriginals = originals > 1
+                ? Math.max(1, originals - Math.max(1, Math.round(originals * validationRatio)))
+                : originals;
+            const shortage = Math.max(0, base - originals);
+            const augmented = hasAugmentation ? shortage + trainingOriginals * copies : 0;
+            const finalCount = originals + augmented;
+            if (shortage && !hasAugmentation) {
+                warnings.push(`${row.querySelector('.species-export-name').textContent} needs augmentation to reach ${base}.`);
+            }
+            total += finalCount;
+            const tableRow = document.createElement('tr');
+            [
+                row.querySelector('.species-export-name').textContent,
+                available,
+                base,
+                augmented,
+                finalCount
+            ].forEach((value, index) => {
+                const cell = document.createElement(index === 0 ? 'th' : 'td');
+                if (index === 0) cell.scope = 'row';
+                cell.textContent = String(value);
+                tableRow.append(cell);
+            });
+            preview.append(tableRow);
+        });
+
+        document.getElementById('export-summary').textContent = selectedRows.length
+            ? `${total} files across ${selectedRows.length} species, plus manifest.json`
+            : 'Choose at least one available species.';
+        document.getElementById('export-warning').textContent = warnings.join(' ');
+        document.getElementById('create-export-button').disabled = selectedRows.length === 0;
+    }
+
+    exportForm.addEventListener('change', event => {
+        if (event.target.name === 'augmentations') {
+            if (distribution.value === 'natural' && selectedAugmentations().length && Number(augmentationCopies.value) === 0) {
+                augmentationCopies.value = '1';
+            } else if (!selectedAugmentations().length) {
+                augmentationCopies.value = '0';
+            }
+        }
+        updateExportPreview();
+    });
+    exportForm.addEventListener('input', updateExportPreview);
+    speciesRows.forEach(row => {
+        row.querySelector('.custom-species-target').addEventListener('input', event => {
+            event.target.dataset.edited = 'true';
+        });
+    });
+    exportForm.addEventListener('submit', event => {
+        const selectedRows = speciesRows.filter(row =>
+            row.querySelector('input[name="species"]').checked
+        );
+        if (!selectedRows.length) {
+            event.preventDefault();
+            updateExportPreview();
+            return;
+        }
+        const targets = {};
+        selectedRows.forEach(row => {
+            targets[row.querySelector('input[name="species"]').value] =
+                Number(row.querySelector('.custom-species-target').value);
+        });
+        document.getElementById('species-targets').value = JSON.stringify(targets);
+    });
+    exportDialog.addEventListener('click', event => {
+        if (event.target === exportDialog) closeTrainingExport();
+    });
+</script>
+{% endblock content%}

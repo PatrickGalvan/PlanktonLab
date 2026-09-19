@@ -1,0 +1,92 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/table.css') }}?v=2.1.0" rel="stylesheet" />
+{% endblock page_styles %}
+{% block content %}
+<div class="table_content">
+  <header class="table-page-header">
+    <div>
+      <p class="page-eyebrow">Database table</p>
+      <h1>{{ table | replace('_', ' ') | title }}</h1>
+      <p class="page-subtitle">Review and manage the records stored in this table.</p>
+    </div>
+    {% if table != "sampling_metadata" %}
+    <a class="btn-primary" href="{{ url_for('add_data', param=table) }}"><i class="fa-solid fa-plus"></i>Add Entry</a>
+    {% endif %}
+  </header>
+  <div class="table-scroll surface-card">
+  <table>
+    <thead>
+      <tr>
+        {% for header in table_headers %}
+        {% if "_id" not in header and header != "id" %}
+        <th>{{ header }}</th>
+        {% endif %}
+        {% endfor %}
+        <th><span class="visually-hidden">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for data in table_data %}
+      {% if table == "sampling_metadata" %}
+      <tr class="clickable-row" onclick="window.location.href='/pages/classification/{{ data.id }}'">
+        {% else %}
+      <tr>
+        {% endif %}
+        {% for header in table_headers %}
+        {% if "_id" not in header and header != "id" %}
+        <td>
+          {% if header == "image_base64" %}
+          <img src="data:image/jpeg;base64,{{ data[header] }}" alt="sample image" style="width: auto; height: 80px" />
+          {% else %}
+          {{ data[header] }}
+          {% endif %}
+        </td>
+        {% endif %}
+        {% endfor %}
+        <td class="row-actions-cell">
+          <div class="row-actions" onclick="event.stopPropagation();">
+            <a class="edit-button" href="{{ url_for('edit_database_row', table=table, id=data.id) }}">
+              <i class="fa-solid fa-pen" aria-hidden="true"></i> Edit
+            </a>
+            <form class="delete-form" action="{{ url_for('erase', table=table, id=data.id) }}" method="POST">
+              <button class="delete-button" type="submit"
+                onclick="return confirm('Delete this record? This action cannot be undone.');">
+                <i class="fa-solid fa-trash" aria-hidden="true"></i> Delete
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not table_data %}
+      <tr><td class="empty-table" colspan="{{ table_headers | length }}">No records found in this table.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+  </div>
+
+  <div class="pagination">
+    <a href="/pages/database">Back</a>
+    {% if pagination.has_prev %}
+    <a href="{{ url_for('tables_builder', param=table, page=pagination.prev_num) }}">« Prev</a>
+    {% endif %}
+    {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+    {% if p %}
+    {% if p == pagination.page %}
+    <strong>{{ p }}</strong>
+    {% else %}
+    <a href="{{ url_for('tables_builder', param=table, page=p) }}">{{ p }}</a>
+    {% endif %}
+    {% else %}
+    …
+    {% endif %}
+    {% endfor %}
+    {% if pagination.has_next %}
+    <a href="{{ url_for('tables_builder', param=table, page=pagination.next_num) }}">Next »</a>
+    {% endif %}
+  </div>
+</div>
+
+
+{% endblock content %}

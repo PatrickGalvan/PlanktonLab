@@ -1,0 +1,258 @@
+.classification-workspace {
+  display: flex;
+  height: calc(100vh - var(--nav-height));
+  min-height: 0;
+  flex-direction: column;
+}
+
+.classification-toolbar {
+  display: flex;
+  min-height: 70px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.classification-toolbar h1 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.classification-toolbar p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.runtime-model-selector {
+  display: grid;
+  min-width: min(300px, 28vw);
+  gap: 4px;
+  margin-left: auto;
+}
+
+.runtime-model-selector label {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.runtime-model-selector select {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 34px 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #0d1526;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.runtime-model-selector select:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.image-zoom-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.image-zoom-controls button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.image-zoom-controls button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+#image-zoom {
+  width: clamp(100px, 14vw, 180px);
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+#zoom-value {
+  width: 48px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.canvas_container {
+  margin: 0;
+  padding: 0;
+  display: block;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  position: relative;
+  overflow: auto;
+  background-color: #070c16;
+  background-image: linear-gradient(45deg, #0d1526 25%, transparent 25%),
+    linear-gradient(-45deg, #0d1526 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #0d1526 75%),
+    linear-gradient(-45deg, transparent 75%, #0d1526 75%);
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+  background-size: 24px 24px;
+}
+
+.canvas_container > img {
+  vertical-align: bottom; /* moves image to true text bottom */
+}
+
+.canvas_container img,
+.canvas_container canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  height: auto;
+}
+
+.img_classification_none {
+  opacity: 0;
+}
+
+#overlay_canvas {
+  pointer-events: all;
+  cursor: crosshair;
+  /* Allows clicks to pass through if needed */
+}
+
+#chart-container {
+  position: fixed;
+  left: 20px;
+  bottom: 50px;
+  width: 20vw;
+  height: 50vh;
+  border: 1px solid var(--border);
+  background: rgba(17, 24, 39, 0.96);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+}
+
+#chart-container .hidden {
+  display: none;
+}
+
+#speciesChart {
+  width: 100%;
+  height: 100%;
+}
+
+.classification-progress-card {
+  width: min(460px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.classification-progress-eyebrow {
+  margin: 0 0 6px;
+  color: var(--primary-hover);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.classification-progress-card h2 {
+  margin: 0 0 16px;
+  font-size: 1.1rem;
+}
+
+#classification-progress {
+  width: 100%;
+  height: 14px;
+  accent-color: var(--primary);
+}
+
+#classification-progress-detail {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+#classification-progress-dismiss {
+  margin-top: 18px;
+}
+
+@media (max-width: 700px) {
+  .classification-toolbar {
+    min-height: 60px;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+
+  .classification-toolbar p {
+    display: none;
+  }
+
+  .runtime-model-selector {
+    min-width: 180px;
+  }
+
+  #image-zoom {
+    width: 80px;
+  }
+
+  .image-zoom-controls {
+    gap: 5px;
+  }
+
+  .image-zoom-controls button {
+    width: 32px;
+    height: 32px;
+  }
+
+  #zoom-value {
+    width: 42px;
+  }
+
+  #chart-container {
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .classification-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .image-zoom-controls {
+    justify-content: center;
+  }
+
+  .runtime-model-selector {
+    width: 100%;
+    margin-left: 0;
+  }
+}

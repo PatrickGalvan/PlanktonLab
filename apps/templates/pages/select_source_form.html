@@ -1,0 +1,135 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/form.css') }}?v=2.0.0" rel="stylesheet" />
+{% endblock page_styles %}
+{% block content %}
+<div class="form-page">
+  <header class="page-header">
+    <p class="page-eyebrow">Classification workflow</p>
+    <h1>Choose an image source</h1>
+    <p class="page-subtitle">Continue an existing analysis or upload a new microscopy image.</p>
+    <ol class="workflow-steps" aria-label="Classification progress">
+      <li class="active" data-step="1">Select source</li>
+      <li data-step="2">Review detections</li>
+      <li data-step="3">Save results</li>
+    </ol>
+  </header>
+
+<div class="form-container">
+  <h2>Image source</h2>
+  <p class="form-intro">Select how you want to begin.</p>
+
+  <form action="{{ url_for('select_source') }}" method="POST" enctype="multipart/form-data" class="action-form">
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+      <button type="button" id="load_from_db" class="btn-action">
+        <i class="fa-solid fa-database"></i> From Database
+      </button>
+      <button type="button" id="classify_new_image" class="btn-action">
+        <i class="fa-solid fa-cloud-arrow-up"></i> New Image
+      </button>
+    </div>
+
+    <input type="hidden" name="action" id="action" />
+
+    <!-- Load from DB Section -->
+    <div id="load_image_db" class="form-section">
+      <label for="db_selection">Select File from Database:</label>
+      <select name="db_selection" id="db_selection">
+        <option value="">-- Select --</option>
+        {% for db_file in db_files %}
+        <option value="{{ db_file.id }}">{{ db_file.image_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Upload New Image Section -->
+    <div id="image_input_container" class="form-section">
+      <label for="image_file">Upload a New Image:</label>
+      <div class="file-upload-wrapper">
+        <input type="file" name="image_file" id="image_file" accept="image/*" />
+        <div class="file-upload-button">
+          <span>Select File</span>
+        </div>
+        <span id="file-selected" class="file-selected" aria-live="polite">No file chosen</span>
+      </div>
+
+      <label for="user_selection">Operator:</label>
+      <select name="user_selection" id="user_selection">
+        <option value="">-- Select --</option>
+        {% for user in users %}
+        <option value="{{ user.id }}">{{ user.username }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="lake_selection">Lake:</label>
+      <select name="lake_selection" id="lake_selection">
+        <option value="">-- Select --</option>
+        {% for lake in lakes %}
+        <option value="{{ lake.id }}">{{ lake.lake }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="date_selection">Date:</label>
+      <input type="date" name="date_selection" id="date_selection" placeholder="YYYY-MM-DD" />
+    </div>
+
+    <!-- Submit Button -->
+    <button type="submit" id="submit_button"><i class="fa-solid fa-arrow-right"></i> Continue</button>
+  </form>
+</div>
+</div>
+
+<script>
+  const loadBtn = document.getElementById("load_from_db");
+  const classifyBtn = document.getElementById("classify_new_image");
+  const loadSection = document.getElementById("load_image_db");
+  const uploadSection = document.getElementById("image_input_container");
+  const submitBtn = document.getElementById("submit_button");
+
+  loadBtn.addEventListener("click", () => {
+    document.getElementById("action").value = "load_from_db";
+    loadSection.style.display = "block";
+    uploadSection.style.display = "none";
+    submitBtn.style.display = "block";
+
+    document.getElementById("db_selection").required = true;
+    document.getElementById("user_selection").required = false;
+    document.getElementById("lake_selection").required = false;
+    document.getElementById("date_selection").required = false;
+    loadBtn.classList.add("is-selected");
+    classifyBtn.classList.remove("is-selected");
+  });
+
+  classifyBtn.addEventListener("click", () => {
+    document.getElementById("action").value = "classify_new_image";
+    loadSection.style.display = "none";
+    uploadSection.style.display = "block";
+    submitBtn.style.display = "block";
+
+    document.getElementById("db_selection").required = false;
+    document.getElementById("user_selection").required = true;
+    document.getElementById("lake_selection").required = true;
+    document.getElementById("date_selection").required = true;
+    classifyBtn.classList.add("is-selected");
+    loadBtn.classList.remove("is-selected");
+  });
+
+  // handle fileinput so it looks better
+  const fileInput = document.getElementById("image_file");
+  const fileNameDisplay = document.getElementById("file-selected");
+
+  fileInput.addEventListener("change", function () {
+    if (fileInput.files.length > 0) {
+      fileNameDisplay.textContent = fileInput.files[0].name;
+    } else {
+      fileNameDisplay.textContent = "No file chosen";
+    }
+  });
+
+  document.querySelector('.action-form').addEventListener('submit', () => {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing';
+  });
+</script>
+{% endblock content %}

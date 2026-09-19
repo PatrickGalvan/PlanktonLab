@@ -1,0 +1,85 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/form.css') }}?v=2.3.0" rel="stylesheet" />
+{% endblock page_styles %}
+{% block content %}
+<div class="form-page">
+  <header class="page-header">
+    <p class="page-eyebrow">Database</p>
+    <h1>{{ 'Edit' if mode == 'edit' else 'Add' }} {{ table | replace('_', ' ') | title }}</h1>
+    <p class="page-subtitle">
+      {{ 'Update this record using the fields below.' if mode == 'edit' else 'Create a new record using the fields below.' }}
+    </p>
+  </header>
+  <div class="form-container database-record-form">
+    <h2>Record details</h2>
+    <p class="form-intro">
+      Required fields are marked with an asterisk. Created and updated timestamps are managed automatically.
+    </p>
+    <form action="{{ url_for('edit_database_row', table=table, id=record_id) if mode == 'edit' else url_for('insert_do_db') }}"
+      method="POST">
+      <input type="hidden" name="table" value="{{ table }}" />
+
+      {% for field in fields %}
+      {% if field.input_type == 'hidden' %}
+      <input type="hidden" name="{{ field.name }}" id="{{ field.name }}" value="{{ field.value }}" />
+      {% else %}
+      {% if table == 'lakes' and field.name == 'depth' %}
+      <details class="lake-metadata-fields" data-lake-details{% if mode == 'edit' %} open{% endif %}>
+        <summary>Optional lake metadata <i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+        <p>Imported values are suggestions. Review or edit them before saving.</p>
+        <div class="setup-fields-grid">
+      {% endif %}
+      <div class="form-group">
+        <label for="{{ field.name }}">
+          {{ field.label }}{% if field.required %}<span class="required-marker" aria-hidden="true"> *</span>{% endif %}
+        </label>
+
+        {% if field.input_type == 'boolean' %}
+        <select name="{{ field.name }}" id="{{ field.name }}" {% if field.required %}required{% endif %}>
+          {% if field.nullable or not field.required %}<option value="">Use default / none</option>{% endif %}
+          <option value="true" {% if field.value == 'true' %}selected{% endif %}>True</option>
+          <option value="false" {% if field.value == 'false' %}selected{% endif %}>False</option>
+        </select>
+        {% elif field.input_type == 'select' %}
+        <select name="{{ field.name }}" id="{{ field.name }}" {% if field.required %}required{% endif %}>
+          <option value="" {% if not field.value %}selected{% endif %} disabled>Select {{ field.label | lower }}</option>
+          {% for option in field.options %}
+          <option value="{{ option }}" {% if field.value == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+        {% elif field.multiline %}
+        <textarea name="{{ field.name }}" id="{{ field.name }}" rows="5"
+          placeholder="Enter {{ field.label | lower }}..." {% if field.required %}required{% endif %}>{{ field.value }}</textarea>
+        {% else %}
+        <input type="{{ field.input_type }}" name="{{ field.name }}" id="{{ field.name }}"
+          value="{{ field.value }}" placeholder="Enter {{ field.label | lower }}..."
+          {% if field.step %}step="{{ field.step }}"{% endif %} {% if field.required %}required{% endif %} />
+        {% endif %}
+      </div>
+      {% if table == 'lakes' and mode == 'add' and field.name == 'country' %}
+      {% include 'includes/lake_lookup.html' %}
+      {% endif %}
+      {% if table == 'lakes' and field.name == 'administrative_region' %}
+        </div>
+      </details>
+      {% endif %}
+      {% endif %}
+      {% endfor %}
+
+      <div class="form-actions">
+        <button type="submit">
+          <i class="fa-solid {{ 'fa-floppy-disk' if mode == 'edit' else 'fa-plus' }}" aria-hidden="true"></i>
+          {{ 'Save Changes' if mode == 'edit' else 'Add Entry' }}
+        </button>
+        <a class="btn-secondary" href="{{ url_for('tables_builder', param=table) }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock content %}
+{% block page_scripts %}
+{% if table == 'lakes' and mode == 'add' %}
+<script src="{{ url_for('static', filename='assets/js/lake_lookup.js') }}?v=1.0.0"></script>
+{% endif %}
+{% endblock page_scripts %}

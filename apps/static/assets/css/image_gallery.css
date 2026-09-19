@@ -1,0 +1,524 @@
+/* =====================
+   Gallery grid
+   ===================== */
+.image-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 16px;
+  width: min(var(--content-width), calc(100% - 40px));
+  margin: 0 auto;
+  padding: 40px 0 96px;
+}
+
+.gallery-header {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 8px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, var(--surface-elevated), var(--surface));
+  box-shadow: var(--shadow-sm);
+}
+
+.gallery-header h1 {
+  margin: 3px 0 6px;
+  font-size: clamp(1.6rem, 3vw, 2.25rem);
+}
+
+.gallery-header p:last-child {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.review-progress {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #fcd34d;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.review-progress.is-complete {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.1);
+  color: #86efac;
+}
+
+.image-card {
+  position: relative;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.image-card img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+}
+
+.image-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+
+/* =====================
+     Hover overlay
+     ===================== */
+.image-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.image-card:hover .image-overlay {
+  opacity: 1;
+}
+
+/* =====================
+     Modal backdrop
+     ===================== */
+.image-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 2000;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =====================
+     Modal content
+     ===================== */
+.modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(480px, calc(100% - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.preview-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.preview-stage {
+  position: relative;
+  display: grid;
+  flex: 0 1 auto;
+  min-width: 0;
+  width: min(var(--preview-width, 320px), 100%);
+  height: min(var(--preview-height, 240px), 42vh);
+  max-height: 360px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%) 0 0 / 20px 20px,
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%) 0 0 / 20px 20px,
+    #111827;
+  overflow: hidden;
+}
+
+.preview-stage img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+  animation: zoomIn 0.2s ease;
+}
+
+.preview-nav {
+  position: static;
+  flex: 0 0 36px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  cursor: pointer;
+}
+
+.preview-nav:hover {
+  background: var(--primary);
+}
+
+.relabel-panel {
+  width: 100%;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(17, 24, 39, 0.96);
+}
+
+.relabel-panel label {
+  display: block;
+  margin-bottom: 7px;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.key-hint {
+  display: inline-flex;
+  margin-left: 5px;
+  color: #93c5fd;
+  font-weight: 700;
+}
+
+.relabel-panel select {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 9px;
+  background: #111827;
+  color: #fff;
+}
+
+.relabel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.delete-sample-btn {
+  min-height: 38px;
+  padding: 7px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.delete-sample-btn {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+
+.delete-sample-btn:hover {
+  background: rgba(185, 28, 28, 0.45);
+}
+
+.keyboard-guide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 10px;
+  color: #9ca3af;
+  font-size: 0.78rem;
+}
+
+.keyboard-guide span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.keyboard-guide kbd {
+  min-width: 22px;
+  padding: 2px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+  font: inherit;
+  font-weight: 800;
+  text-align: center;
+}
+
+/* =====================
+     Close + counter
+     ===================== */
+.close-modal {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  z-index: 3;
+  border: 0;
+  background: transparent;
+  font-size: 32px;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.image-counter {
+  position: absolute;
+  bottom: 20px;
+  color: #fff;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 4px 10px;
+  border-radius: 12px;
+  user-select: none;
+}
+
+/* =====================
+     Save Button
+     ===================== */
+
+.save-btn {
+  display: inline-flex;
+  width: auto;
+  min-height: 38px;
+  align-items: center;
+  margin-left: auto;
+  white-space: nowrap;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 18px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.save-btn:hover {
+  background: var(--primary-strong);
+  transform: translateY(-1px);
+}
+
+.image-card.selected {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.image-card.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.reviewed-indicator {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(134, 239, 172, 0.5);
+  border-radius: 999px;
+  background: rgba(22, 101, 52, 0.9);
+  color: #dcfce7;
+  font-size: 0.72rem;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+/* Gallery action buttons container */
+.gallery-actions {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  gap: 10px;
+  z-index: 1000; /* above gallery items */
+}
+
+.gallery-actions form {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+
+/* Back button */
+.back-btn {
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+/* Save button */
+.save-gallery-btn,
+.next-review-btn {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 18px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.save-gallery-btn:hover,
+.next-review-btn:hover {
+  background: var(--primary-strong);
+  transform: translateY(-1px);
+}
+
+.gallery-actions .review-gallery-btn,
+.gallery-actions .review-next-btn {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border-radius: 11px;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.32);
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.gallery-actions .review-gallery-btn {
+  border: 1px solid rgba(74, 222, 128, 0.55);
+  background: rgba(22, 101, 52, 0.82);
+}
+
+.gallery-actions .review-next-btn {
+  border: 1px solid #22c55e;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+}
+
+.gallery-actions .review-gallery-btn:hover:not(:disabled),
+.gallery-actions .review-next-btn:hover:not(:disabled) {
+  border-color: #86efac;
+  background: #16a34a;
+  transform: translateY(-2px);
+}
+
+.gallery-actions .review-gallery-btn:focus-visible,
+.gallery-actions .review-next-btn:focus-visible {
+  outline: 3px solid rgba(134, 239, 172, 0.38);
+  outline-offset: 2px;
+}
+
+.action-count {
+  display: inline-grid;
+  min-width: 23px;
+  height: 23px;
+  padding: 0 6px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 0.72rem;
+}
+
+.next-review-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(0, 0, 0, 0.72);
+  text-decoration: none;
+}
+
+.review-gallery-btn:disabled,
+.review-next-btn:disabled,
+.save-gallery-btn:disabled,
+.save-btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+@media (max-width: 640px) {
+  .image-gallery {
+    width: min(100% - 24px, var(--content-width));
+    padding-top: 24px;
+  }
+
+  .gallery-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .gallery-actions {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    justify-content: flex-end;
+    overflow-x: auto;
+  }
+
+  .preview-stage {
+    max-height: 34vh;
+  }
+
+  .delete-sample-btn {
+    margin-left: 0;
+  }
+
+  .save-btn {
+    margin-left: 0;
+  }
+}
+
+/* =====================
+     Animation
+     ===================== */
+@keyframes zoomIn {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

@@ -1,0 +1,900 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/form.css') }}?v=2.0.0" rel="stylesheet" />
+<link href="{{ url_for('static', filename='assets/css/data_explorer.css') }}?v=2.2.0" rel="stylesheet" />
+{% endblock page_styles %}
+{% block content %}
+<div class="parent-container">
+
+    <header class="page-header">
+        <p class="page-eyebrow">Explore your data</p>
+        <h1>Data explorer</h1>
+        <p class="page-subtitle">Build a query visually or write read-only SQL, then search, sort, and export the results.</p>
+    </header>
+
+    <!-- =========================
+         Query Builder Form
+    ========================= -->
+    <div class="form-container data-explorer">
+        <div class="query-mode-tabs" role="tablist" aria-label="Query mode">
+            <button id="guided-mode-tab" class="query-mode-tab is-active" type="button" role="tab"
+                aria-selected="true" aria-controls="guided-query-panel">
+                <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Visual builder
+            </button>
+            <button id="sql-mode-tab" class="query-mode-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="sql-query-panel">
+                <i class="fa-solid fa-code" aria-hidden="true"></i> SQL editor
+            </button>
+        </div>
+
+        <section id="guided-query-panel" class="query-mode-panel" role="tabpanel"
+            aria-labelledby="guided-mode-tab">
+            <div class="mode-heading">
+                <div>
+                    <h2>Build a query</h2>
+                    <p class="form-intro">Choose a starting table, add relationships and filters, then review the generated SQL.</p>
+                </div>
+                <span class="mode-badge">No SQL required</span>
+            </div>
+
+            <div id="query-builder-root">
+
+            <!-- Base Table -->
+            <div class="qb-section">
+                <label for="base-table">Base Table</label>
+                <select id="base-table">
+                    <option value="">-- Select table --</option>
+                    {% for table in tables %}
+                    <option value="{{ table }}">{{ table }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Joins -->
+            <div class="qb-section">
+                <label>Join Tables</label>
+                <div id="join-options" class="join-options">
+                    <em>Select a base table to see joins</em>
+                </div>
+            </div>
+
+            <!-- Tables + Columns Tree -->
+            <div class="qb-section">
+                <label>Tables & Columns</label>
+                <div id="tables-tree" class="tables-tree">
+                    <em>Select a base table to see joins and columns</em>
+                </div>
+            </div>
+
+            <!-- Conditions -->
+            <div class="qb-section">
+                <label>Conditions</label>
+                <div id="condition-list">
+                    <em>Add conditions after selecting tables and columns</em>
+                </div>
+                <button id="add-condition-btn" type="button"><i class="fa-solid fa-plus"></i> Add Condition</button>
+            </div>
+
+            <!-- Live SQL Preview -->
+            <div class="qb-section">
+                <label>SQL Preview</label>
+                <pre id="sql-preview" class="sql-preview">
+-- Select a base table to start building your query --
+                </pre>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="qb-actions">
+                <button type="button" class="btn-secondary" onclick="resetState()"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+                <button type="button" class="btn-primary" onclick="runQuery()"><i class="fa-solid fa-play"></i> Run query</button>
+            </div>
+
+            </div>
+        </section>
+
+        <section id="sql-query-panel" class="query-mode-panel" role="tabpanel"
+            aria-labelledby="sql-mode-tab" hidden>
+            <div class="mode-heading">
+                <div>
+                    <h2>Write SQL</h2>
+                    <p class="form-intro">For proficient users. Run one read-only SELECT statement or CTE at a time.</p>
+                </div>
+                <span class="mode-badge mode-badge-safe"><i class="fa-solid fa-shield-halved"></i> Read only</span>
+            </div>
+
+            <label for="sql-query-editor">SQL query</label>
+            <textarea id="sql-query-editor" class="sql-query-editor" rows="10" spellcheck="false">SELECT id, image_name, sampling_date
+FROM sampling_metadata
+ORDER BY sampling_date DESC
+LIMIT 100;</textarea>
+            <div class="editor-helper">
+                <span><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> to run</span>
+                <span>All matching rows are returned</span>
+            </div>
+
+            <details class="schema-reference">
+                <summary>Schema reference</summary>
+                <div class="schema-grid">
+                    {% for table, columns in table_columns.items() %}
+                    <article class="schema-table">
+                        <h3>
+                            {{ table }}
+                            {% if columns and columns[0].view %}<span>view</span>{% endif %}
+                        </h3>
+                        <ul>
+                            {% for column in columns %}
+                            <li><code>{{ column.name }}</code><span>{{ column.type }}</span></li>
+                            {% endfor %}
+                        </ul>
+                    </article>
+                    {% endfor %}
+                </div>
+            </details>
+
+            <div class="qb-actions">
+                <button id="clear-sql-btn" type="button" class="btn-secondary"><i class="fa-solid fa-eraser"></i> Clear</button>
+                <button id="run-sql-btn" type="button" class="btn-primary"><i class="fa-solid fa-play"></i> Run SQL</button>
+            </div>
+        </section>
+
+        <p id="query-feedback" class="query-feedback" role="alert" hidden></p>
+    </div>
+
+    <!-- =========================
+         Query Results Container
+    ========================= -->
+    <div class="query-results-container">
+        <div class="results-heading">
+            <h2>Query results</h2>
+            <span id="result-summary">0 rows</span>
+        </div>
+        <!-- Export Button -->
+        <div class="result-toolbar">
+            <input type="text" id="query-search" placeholder="Search results" aria-label="Search query results">
+            <button id="export-btn"><i class="fa-solid fa-download"></i> Export CSV</button>
+        </div>
+        <div id="query-results">
+            <em>No data yet</em>
+        </div>
+        <div id="query-pagination"></div>
+        <button type="button" onclick="resetResults()" class="btn-secondary"><i class="fa-solid fa-arrow-left"></i> Clear results</button>
+    </div>
+
+</div>
+
+<script>
+    /* =========================
+       Global State
+    ========================= */
+    const JOIN_GRAPH = {{ join_graph | tojson }};
+    const RELATIONSHIPS = {{ relationships | tojson }};
+    const TABLE_COLUMNS = {{ table_columns | tojson }};
+
+    const selectedTables = new Set();
+    const selectedJoins = new Map();
+    const selectedColumns = new Map();
+    const conditions = [];
+
+    /* =========================
+       DOM References
+    ========================= */
+    const baseTableSelect = document.getElementById("base-table");
+    const joinOptions = document.getElementById("join-options");
+    const tablesTree = document.getElementById("tables-tree");
+    const conditionList = document.getElementById("condition-list");
+    const addConditionBtn = document.getElementById("add-condition-btn");
+    const sqlPreviewEl = document.getElementById("sql-preview");
+    const queryFeedback = document.getElementById("query-feedback");
+    const sqlEditor = document.getElementById("sql-query-editor");
+    const guidedModeTab = document.getElementById("guided-mode-tab");
+    const sqlModeTab = document.getElementById("sql-mode-tab");
+
+    function setQueryMode(mode) {
+        const useSql = mode === "sql";
+        document.getElementById("guided-query-panel").hidden = useSql;
+        document.getElementById("sql-query-panel").hidden = !useSql;
+        guidedModeTab.classList.toggle("is-active", !useSql);
+        sqlModeTab.classList.toggle("is-active", useSql);
+        guidedModeTab.setAttribute("aria-selected", String(!useSql));
+        sqlModeTab.setAttribute("aria-selected", String(useSql));
+        clearFeedback();
+        if (useSql) sqlEditor.focus();
+    }
+
+    function showFeedback(message) {
+        queryFeedback.textContent = message;
+        queryFeedback.hidden = false;
+    }
+
+    function clearFeedback() {
+        queryFeedback.textContent = "";
+        queryFeedback.hidden = true;
+    }
+
+    function setQueryBusy(isBusy) {
+        document.querySelectorAll("#run-sql-btn, .qb-actions .btn-primary").forEach(button => {
+            button.disabled = isBusy;
+        });
+    }
+
+    async function postQuery(url, payload) {
+        clearFeedback();
+        setQueryBusy(true);
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json().catch(() => ({
+                error: "The server returned an unreadable response."
+            }));
+            if (!response.ok) throw new Error(data.error || "The query could not be completed.");
+            return data;
+        } finally {
+            setQueryBusy(false);
+        }
+    }
+
+    guidedModeTab.addEventListener("click", () => setQueryMode("guided"));
+    sqlModeTab.addEventListener("click", () => setQueryMode("sql"));
+    document.getElementById("clear-sql-btn").addEventListener("click", () => {
+        sqlEditor.value = "";
+        sqlEditor.focus();
+        clearFeedback();
+    });
+    document.getElementById("run-sql-btn").addEventListener("click", runSqlQuery);
+    sqlEditor.addEventListener("keydown", event => {
+        if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.preventDefault();
+            runSqlQuery();
+        }
+    });
+
+
+    /* =========================
+       Base Table Selection
+    ========================= */
+    baseTableSelect.addEventListener("change", () => {
+        const base = baseTableSelect.value;
+        resetState(true);
+        if (!base) return;
+
+        selectedTables.add(base);
+        renderJoinOptions();
+        renderTablesTree();
+        renderConditions();
+        updateSQLPreview();
+    });
+
+    /* =========================
+       Add Condition
+    ========================= */
+    addConditionBtn.addEventListener("click", () => {
+        if (selectedTables.size === 0) {
+            alert("Select at least one table first.");
+            return;
+        }
+
+        conditions.push({
+            table: null,
+            column: null,
+            operator: "=",
+            value: "",
+            logic: "AND",
+            openParen: 0,
+            closeParen: 0
+        });
+
+        renderConditions();
+        updateSQLPreview();
+    });
+
+    /* =========================
+       Join Rendering
+    ========================= */
+    function renderJoinOptions() {
+        joinOptions.innerHTML = "";
+
+        if (!selectedTables.size) {
+            joinOptions.innerHTML = "<em>Select a base table to see joins</em>";
+            return;
+        }
+
+        selectedJoins.forEach(join =>
+            joinOptions.appendChild(createJoinCheckbox(join, true))
+        );
+
+        selectedTables.forEach(table => {
+            (JOIN_GRAPH[table] || []).forEach(target => {
+                if (selectedTables.has(target)) return;
+                const rel = RELATIONSHIPS.find(
+                    r => r.from_table === table && r.to_table === target
+                );
+                if (!rel) return;
+                joinOptions.appendChild(createJoinCheckbox(rel, false));
+            });
+        });
+    }
+
+    function createJoinCheckbox(join, checked) {
+        const label = document.createElement("label");
+        label.className = "join-item";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = checked;
+
+        checkbox.addEventListener("change", () => {
+            checkbox.checked ? addJoin(join) : cascadeRemove(join.to_table);
+            renderJoinOptions();
+            renderTablesTree();
+            updateSQLPreview();
+        });
+
+        const text = document.createElement("span");
+        text.innerHTML = `${join.to_table}
+            <span class="join-hint">
+                (${join.from_table}.${join.from_column} → ${join.to_table}.${join.to_column})
+            </span>`;
+
+        label.append(checkbox, text);
+        return label;
+    }
+
+    /* =========================
+       Tables & Columns Tree
+    ========================= */
+    function renderTablesTree() {
+        tablesTree.innerHTML = "";
+        if (!selectedTables.size) {
+            tablesTree.innerHTML = "<em>Select a base table to see joins and columns</em>";
+            return;
+        }
+
+        function renderNode(table, parentEl) {
+            const wrapper = document.createElement("div");
+            wrapper.className = parentEl === tablesTree ? "table-node" : "join-node";
+
+            // Table checkbox (checked by default)
+            const label = document.createElement("label");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = true;
+
+            checkbox.addEventListener("change", () => {
+                cascadeRemove(table);
+                renderTablesTree();
+                renderConditions();
+                updateSQLPreview();
+            });
+
+            label.append(checkbox, " " + table);
+            wrapper.appendChild(label);
+
+            // Columns container
+            const colsEl = document.createElement("div");
+            colsEl.className = "column-node";
+
+            (TABLE_COLUMNS[table] || []).forEach(col => {
+                const colLabel = document.createElement("label");
+                const colCb = document.createElement("input");
+                colCb.type = "checkbox";
+
+                colCb.checked = true;
+                toggleColumn(table, col.name, true); // add to selectedColumns
+
+                colCb.addEventListener("change", e => {
+                    toggleColumn(table, col.name, e.target.checked);
+                    updateSQLPreview();
+                });
+
+                colLabel.append(colCb, " " + col.name);
+                colsEl.appendChild(colLabel);
+            });
+
+            wrapper.appendChild(colsEl);
+            parentEl.appendChild(wrapper);
+
+            // Recursively render joins
+            (JOIN_GRAPH[table] || []).forEach(child => {
+                if (selectedTables.has(child)) renderNode(child, wrapper);
+            });
+        }
+
+        renderNode([...selectedTables][0], tablesTree);
+    }
+
+
+    /* =========================
+       Columns
+    ========================= */
+    function toggleColumn(table, column, checked) {
+        if (!selectedColumns.has(table)) {
+            selectedColumns.set(table, new Set());
+        }
+        checked
+            ? selectedColumns.get(table).add(column)
+            : selectedColumns.get(table).delete(column);
+    }
+
+    /* =========================
+       Joins
+    ========================= */
+    function addJoin(rel) {
+        selectedTables.add(rel.to_table);
+        selectedJoins.set(rel.to_table, rel);
+    }
+
+    function cascadeRemove(table) {
+        selectedTables.delete(table);
+        selectedJoins.delete(table);
+        selectedColumns.delete(table);
+
+        (JOIN_GRAPH[table] || []).forEach(child => {
+            if (selectedTables.has(child)) cascadeRemove(child);
+        });
+    }
+
+    /* =========================
+       Conditions (WITH PARENTHESES)
+    ========================= */
+    function renderConditions() {
+        conditionList.innerHTML = "";
+
+        if (!conditions.length) {
+            conditionList.innerHTML = "<em>No conditions added</em>";
+            return;
+        }
+
+        conditions.forEach((cond, idx) => {
+            const wrapper = document.createElement("div");
+            wrapper.className = "condition-item";
+
+            if (idx > 0) {
+                const logic = document.createElement("select");
+                logic.className = "logic-select";
+                logic.innerHTML = ["AND", "OR"].map(op =>
+                    `<option value="${op}" ${cond.logic === op ? "selected" : ""}>${op}</option>`
+                ).join("");
+                logic.onchange = e => {
+                    cond.logic = e.target.value;
+                    updateSQLPreview();
+                };
+                wrapper.appendChild(logic);
+            }
+
+            const openParen = document.createElement("select");
+            openParen.className = "paren-select";
+            openParen.innerHTML = [0, 1, 2, 3].map(n =>
+                `<option value="${n}" ${cond.openParen === n ? "selected" : ""}>${"(".repeat(n)}</option>`
+            ).join("");
+            openParen.onchange = e => {
+                cond.openParen = Number(e.target.value);
+                updateSQLPreview();
+            };
+
+            const closeParen = document.createElement("select");
+            closeParen.className = "paren-select";
+            closeParen.innerHTML = [0, 1, 2, 3].map(n =>
+                `<option value="${n}" ${cond.closeParen === n ? "selected" : ""}>${")".repeat(n)}</option>`
+            ).join("");
+            closeParen.onchange = e => {
+                cond.closeParen = Number(e.target.value);
+                updateSQLPreview();
+            };
+
+            const tableSel = document.createElement("select");
+            tableSel.innerHTML = `<option value="">--Table--</option>` +
+                [...selectedTables].map(t =>
+                    `<option value="${t}" ${cond.table === t ? "selected" : ""}>${t}</option>`
+                ).join("");
+            tableSel.onchange = e => {
+                cond.table = e.target.value;
+                cond.column = null;
+                renderConditions();
+                updateSQLPreview();
+            };
+
+            const colSel = document.createElement("select");
+            colSel.innerHTML = `<option value="">--Column--</option>`;
+            if (cond.table) {
+                colSel.innerHTML += (TABLE_COLUMNS[cond.table] || []).map(c =>
+                    `<option value="${c.name}" ${cond.column === c.name ? "selected" : ""}>${c.name}</option>`
+                ).join("");
+            }
+            colSel.onchange = e => {
+                cond.column = e.target.value;
+                updateSQLPreview();
+            };
+
+            const opSel = document.createElement("select");
+            opSel.innerHTML = ["=", "!=", "<", ">", "<=", ">=", "LIKE"].map(op =>
+                `<option value="${op}" ${cond.operator === op ? "selected" : ""}>${op}</option>`
+            ).join("");
+            opSel.onchange = e => {
+                cond.operator = e.target.value;
+                updateSQLPreview();
+            };
+
+            const valInput = document.createElement("input");
+            valInput.type = "text";
+            valInput.placeholder = "Value";
+            valInput.value = cond.value;
+            valInput.oninput = e => {
+                cond.value = e.target.value;
+                updateSQLPreview();
+            };
+
+            const del = document.createElement("button");
+            del.type = "button";
+            del.className = "delete-condition-btn";
+            del.textContent = "✕";
+            del.onclick = () => {
+                conditions.splice(idx, 1);
+                renderConditions();
+                updateSQLPreview();
+            };
+
+            wrapper.append(
+                openParen,
+                tableSel,
+                colSel,
+                opSel,
+                valInput,
+                closeParen,
+                del
+            );
+
+            conditionList.appendChild(wrapper);
+        });
+    }
+
+    /* =========================
+       SQL Preview (WITH PARENTHESES)
+    ========================= */
+    function updateSQLPreview() {
+        if (!selectedTables.size) {
+            sqlPreviewEl.textContent = "-- Select a base table to start building your query --";
+            return;
+        }
+
+        const cols = [];
+        selectedTables.forEach(t => {
+            const c = selectedColumns.get(t);
+            c && c.size ? c.forEach(x => cols.push(`${t}.${x}`)) : cols.push(`${t}.*`);
+        });
+
+        const selectClause = `SELECT ${cols.join(", ")}`;
+        const base = [...selectedTables][0];
+        const fromClause = `FROM ${base}`;
+
+        let joinClause = "";
+        selectedJoins.forEach(j => {
+            joinClause += `\nJOIN ${j.to_table} ON ${j.from_table}.${j.from_column} = ${j.to_table}.${j.to_column}`;
+        });
+
+        const whereParts = conditions
+            .filter(c => c.table && c.column && c.value)
+            .map((c, i) => {
+                const logic = i === 0 ? "" : ` ${c.logic || "AND"} `;
+                return logic +
+                    "(".repeat(c.openParen) +
+                    `${c.table}.${c.column} ${c.operator} '${c.value}'` +
+                    ")".repeat(c.closeParen);
+            });
+
+        const whereClause = whereParts.length
+            ? "\nWHERE " + whereParts.join("")
+            : "";
+
+        sqlPreviewEl.textContent = [
+            selectClause,
+            fromClause,
+            joinClause,
+            whereClause
+        ].join(" ");
+    }
+
+    /* =========================
+       Reset
+    ========================= */
+    function resetState(preserveBaseTable = false) {
+        selectedTables.clear();
+        selectedJoins.clear();
+        selectedColumns.clear();
+        conditions.length = 0;
+
+        // Clear UI
+        if (!preserveBaseTable) baseTableSelect.value = "";
+        document.getElementById("join-options").innerHTML = "";
+        document.getElementById("tables-tree").innerHTML = "";
+        document.getElementById("condition-list").innerHTML = "";
+        document.getElementById("sql-preview").textContent = "-- Select a base table to start building your query --";
+        clearFeedback();
+        resetResults();
+    }
+
+    function resetResults() {
+        queryData = [];
+        searchTerm = "";
+        currentPage = 1;
+        document.getElementById("query-search").value = "";
+        document.getElementById("query-results").innerHTML = "<em>No data yet</em>";
+        document.getElementById("query-pagination").innerHTML = "";
+        document.getElementById("result-summary").textContent = "0 rows";
+        document.querySelector(".query-results-container").classList.remove("visible");
+    }
+
+
+    /* =========================
+       Query part
+    ========================= */
+    function buildQueryPayload() {
+        const cols = {};
+
+        selectedTables.forEach(table => {
+            const selected = selectedColumns.get(table);
+            cols[table] = selected ? [...selected] : [];
+        });
+
+        return {
+            base_table: [...selectedTables][0] || null,
+            joins: [...selectedJoins.values()],
+            columns: cols,      // 👈 empty array means SELECT *
+            conditions
+        };
+    }
+
+
+    async function runQuery() {
+        const payload = buildQueryPayload();
+
+        if (!payload.base_table) {
+            showFeedback("Select a base table before running the visual query.");
+            return;
+        }
+
+        try {
+            const rows = await postQuery("/pages/run_query", payload);
+            renderQueryResults(rows, `${rows.length} row${rows.length === 1 ? "" : "s"}`);
+        } catch (error) {
+            showFeedback(error.message);
+        }
+    }
+
+    async function runSqlQuery() {
+        const query = sqlEditor.value.trim();
+        if (!query) {
+            showFeedback("Enter a SQL query before running it.");
+            return;
+        }
+
+        try {
+            const result = await postQuery("/pages/run_sql_query", { query });
+            const summary = `${result.row_count} row${result.row_count === 1 ? "" : "s"}`;
+            renderQueryResults(result.rows, summary);
+        } catch (error) {
+            showFeedback(error.message);
+        }
+    }
+
+    /* =========================
+       Table builder
+    ========================= */
+
+    let queryData = [];       // full data array from backend
+    let currentPage = 1;
+    const rowsPerPage = 35;   // change as needed
+    let currentSort = { col: null, dir: "asc" };
+    let searchTerm = "";
+
+    document.getElementById("query-search").addEventListener("input", (e) => {
+        searchTerm = e.target.value.toLowerCase();
+        currentPage = 1; // reset to first page on search
+        renderTablePage();
+    });
+
+
+    function renderQueryResults(data, summary = null) {
+        queryData = data;
+        currentPage = 1;
+        currentSort = { col: null, dir: "asc" };
+        searchTerm = "";
+        document.getElementById("query-search").value = "";
+        document.getElementById("result-summary").textContent = summary || `${data.length} rows`;
+        document.querySelector(".query-results-container").classList.add("visible");
+        renderTablePage();
+        document.querySelector(".query-results-container").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function renderTablePage() {
+        const container = document.getElementById("query-results");
+        container.innerHTML = "";
+
+        if (!queryData || !queryData.length) {
+            container.innerHTML = "<em>No results</em>";
+            document.getElementById("query-pagination").innerHTML = "";
+            return;
+        }
+
+        // Columns dynamically from first row
+        const columns = Object.keys(queryData[0]);
+
+        // Apply search filter
+        let filteredData = [...queryData];
+        if (searchTerm) {
+            filteredData = filteredData.filter(row =>
+                Object.values(row).some(
+                    val => val != null && val.toString().toLowerCase().includes(searchTerm)
+                )
+            );
+        }
+
+        // Apply sorting
+        if (currentSort.col) {
+            filteredData.sort((a, b) => {
+                const v1 = a[currentSort.col];
+                const v2 = b[currentSort.col];
+                if (v1 == null) return 1;
+                if (v2 == null) return -1;
+                if (v1 < v2) return currentSort.dir === "asc" ? -1 : 1;
+                if (v1 > v2) return currentSort.dir === "asc" ? 1 : -1;
+                return 0;
+            });
+        }
+
+        // Pagination slice
+        const start = (currentPage - 1) * rowsPerPage;
+        const end = start + rowsPerPage;
+        const pageData = filteredData.slice(start, end);
+
+        // Build table
+        const table = document.createElement("table");
+
+        // Table header
+        const thead = document.createElement("thead");
+        const headerRow = document.createElement("tr");
+
+        columns.forEach(col => {
+            const th = document.createElement("th");
+            th.textContent = col;
+            if (currentSort.col === col) th.classList.add("sort-" + currentSort.dir);
+
+            // Click header to sort
+            th.onclick = () => {
+                if (currentSort.col === col) {
+                    currentSort.dir = currentSort.dir === "asc" ? "desc" : "asc";
+                } else {
+                    currentSort.col = col;
+                    currentSort.dir = "asc";
+                }
+                renderTablePage();
+            };
+            headerRow.appendChild(th);
+        });
+
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        // Table body
+        const tbody = document.createElement("tbody");
+        pageData.forEach(row => {
+            const tr = document.createElement("tr");
+            columns.forEach(col => {
+                const td = document.createElement("td");
+                td.textContent = row[col];
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+        container.appendChild(table);
+
+        // Render pagination
+        const paginationContainer = document.getElementById("query-pagination");
+        paginationContainer.innerHTML = "";
+        const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+
+        if (totalPages > 1) {
+            for (let i = 1; i <= totalPages; i++) {
+                const btn = document.createElement("button");
+                btn.textContent = i;
+                if (i === currentPage) btn.classList.add("active");
+                btn.onclick = () => {
+                    currentPage = i;
+                    renderTablePage();
+                };
+                paginationContainer.appendChild(btn);
+            }
+        }
+    }
+
+    function renderPagination(totalRows) {
+        const container = document.getElementById("query-pagination");
+        container.innerHTML = "";
+        const totalPages = Math.ceil(totalRows / rowsPerPage);
+
+        if (totalPages <= 1) return;
+
+        for (let i = 1; i <= totalPages; i++) {
+            const btn = document.createElement("button");
+            btn.textContent = i;
+            if (i === currentPage) btn.classList.add("active");
+            btn.onclick = () => {
+                currentPage = i;
+                renderTablePage();
+            };
+            container.appendChild(btn);
+        }
+    }
+
+    // Export data 
+
+    document.getElementById("export-btn").addEventListener("click", () => {
+        if (!queryData || !queryData.length) {
+            alert("No data to export");
+            return;
+        }
+
+        // Convert filtered and sorted data to CSV
+        let csvContent = "";
+        const columns = Object.keys(queryData[0]);
+
+        // Header row
+        csvContent += columns.join(",") + "\n";
+
+        // Data rows (filtered + current search)
+        let filteredData = [...queryData];
+        if (searchTerm) {
+            filteredData = filteredData.filter(row =>
+                Object.values(row).some(
+                    val => val != null && val.toString().toLowerCase().includes(searchTerm)
+                )
+            );
+        }
+
+        filteredData.forEach(row => {
+            const rowArray = columns.map(col => {
+                let val = row[col] != null ? row[col].toString() : "";
+                // Escape double quotes
+                if (val.includes(",") || val.includes('"')) {
+                    val = `"${val.replace(/"/g, '""')}"`;
+                }
+                return val;
+            });
+            csvContent += rowArray.join(",") + "\n";
+        });
+
+        // Create downloadable link
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", "query_results.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    });
+
+
+
+    /* =========================
+       Debug
+    ========================= */
+    window.debugQueryState = () => ({
+        tables: [...selectedTables],
+        joins: [...selectedJoins.values()],
+        columns: Object.fromEntries(
+            [...selectedColumns.entries()].map(([k, v]) => [k, [...v]])
+        ),
+        conditions
+    });
+
+
+</script>
+
+
+{% endblock content %}

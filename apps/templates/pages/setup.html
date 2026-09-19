@@ -1,0 +1,116 @@
+{% extends 'layouts/base.html' %}
+{% block page_styles %}
+<link href="{{ url_for('static', filename='assets/css/form.css') }}?v=2.3.0" rel="stylesheet" />
+{% endblock page_styles %}
+{% block content %}
+<div class="form-page setup-page">
+  <header class="page-header setup-header">
+    <p class="page-eyebrow">First-run setup</p>
+    <h1>Prepare your workspace</h1>
+    <p class="page-subtitle">Add the required metadata once, then continue directly to image classification.</p>
+  </header>
+
+  <form class="form-container setup-form" action="{{ url_for('setup') }}" method="POST">
+    <div class="setup-progress" aria-label="Setup requirements">
+      <span class="{{ 'is-pending' if needs_user else 'is-complete' }}">
+        <i class="fa-solid {{ 'fa-user-plus' if needs_user else 'fa-circle-check' }}" aria-hidden="true"></i>
+        Operator
+      </span>
+      <span class="{{ 'is-pending' if needs_lake else 'is-complete' }}">
+        <i class="fa-solid {{ 'fa-water' if needs_lake else 'fa-circle-check' }}" aria-hidden="true"></i>
+        Lake
+      </span>
+    </div>
+
+    {% if needs_user %}
+    <fieldset class="setup-section">
+      <legend>Initial operator</legend>
+      <p>Classification and review actions will be associated with this operator.</p>
+      <div class="form-group">
+        <label for="username">Name</label>
+        <input id="username" name="username" type="text" autocomplete="name" required autofocus
+          placeholder="e.g. Jane Smith" value="{{ request.form.get('username', '') }}" />
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required
+          placeholder="jane.smith@example.org" value="{{ request.form.get('email', '') }}" />
+      </div>
+    </fieldset>
+    {% endif %}
+
+    {% if needs_lake %}
+    <fieldset class="setup-section">
+      <legend>Initial sampling location</legend>
+      <p>You can add more lakes later from the Database page.</p>
+      <div class="setup-fields-grid">
+        <div class="form-group">
+          <label for="lake">Lake name</label>
+          <input id="lake" name="lake" type="text" required placeholder="e.g. Walchensee"
+            value="{{ request.form.get('lake', '') }}" {% if not needs_user %}autofocus{% endif %} />
+        </div>
+        <div class="form-group">
+          <label for="country">Country</label>
+          <select id="country" name="country" required>
+            <option value="" {% if not request.form.get('country') %}selected{% endif %} disabled>Select country</option>
+            {% for country in countries %}
+            <option value="{{ country }}" {% if request.form.get('country') == country %}selected{% endif %}>{{ country }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      {% include 'includes/lake_lookup.html' %}
+      <details class="lake-metadata-fields" data-lake-details>
+        <summary>Optional lake metadata <i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+        <p>Imported values are suggestions. Review or edit them before saving.</p>
+        <div class="setup-fields-grid">
+          {% set metadata_fields = [
+            ('depth', 'Maximum depth (m)'),
+            ('area', 'Surface area (km²)'),
+            ('latitude', 'Latitude'),
+            ('longitude', 'Longitude'),
+            ('elevation_m', 'Elevation (m)'),
+            ('mean_depth_m', 'Mean depth (m)'),
+            ('volume_km3', 'Volume (km³)'),
+            ('shoreline_length_km', 'Shoreline length (km)'),
+            ('catchment_area_km2', 'Catchment area (km²)'),
+            ('residence_time_days', 'Residence time (days)')
+          ] %}
+          {% for name, label in metadata_fields %}
+          <div class="form-group">
+            <label for="{{ name }}">{{ label }}</label>
+            <input id="{{ name }}" name="{{ name }}" type="number" step="any"
+              value="{{ request.form.get(name, '') }}" />
+          </div>
+          {% endfor %}
+          <div class="form-group">
+            <label for="waterbody_type">Waterbody type</label>
+            <input id="waterbody_type" name="waterbody_type" type="text"
+              value="{{ request.form.get('waterbody_type', '') }}" />
+          </div>
+          <div class="form-group">
+            <label for="administrative_region">Administrative region</label>
+            <input id="administrative_region" name="administrative_region" type="text"
+              value="{{ request.form.get('administrative_region', '') }}" />
+          </div>
+        </div>
+      </details>
+      {% for name in ['external_source', 'external_id', 'source_url', 'metadata_retrieved_at'] %}
+      <input id="{{ name }}" name="{{ name }}" type="hidden" value="{{ request.form.get(name, '') }}" />
+      {% endfor %}
+    </fieldset>
+    {% endif %}
+
+    <button class="btn-primary setup-submit" type="submit">
+      <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+      Save and start classifying
+    </button>
+    <p class="setup-note"><i class="fa-solid fa-lock" aria-hidden="true"></i> Both records are stored only in the local SQLite database.</p>
+  </form>
+</div>
+{% endblock content %}
+{% block page_scripts %}
+{% if needs_lake %}
+<script src="{{ url_for('static', filename='assets/js/lake_lookup.js') }}?v=1.0.0"></script>
+{% endif %}
+{% endblock page_scripts %}
