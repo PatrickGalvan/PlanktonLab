@@ -1,4 +1,4 @@
-# Zooplankton Classification Suite
+# PlanktonLab
 
 A Flask application for detecting objects in microscopy images, classifying image
 crops with a fastai model, storing results in SQLite, and exporting labeled training
@@ -12,7 +12,7 @@ Python installation is required.
 ### Linux
 
 ```bash
-./planktonlab
+ bash ./planktonlab
 ```
 
 ### macOS
